@@ -1,0 +1,11 @@
+{
+    "description": "Let users create, resize and delete their own servers within quotas, and duplicate servers as an admin.",
+    "autoload": {
+        "psr-4": {
+            "ServerCreator\\": "src/"
+        }
+    },
+    "config": {
+        "autoloader-suffix": "ServerCreatorExtension"
+    }
+}

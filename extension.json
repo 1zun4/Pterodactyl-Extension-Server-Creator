@@ -1,0 +1,46 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "server-creator",
+    "name": "Server Creator",
+    "version": "1.0.0",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": "^2.0.0-beta.4",
+        "php": "^8.3"
+    },
+    "description": "Let users create, resize and delete their own servers within quotas, and duplicate servers as an admin.",
+    "author": "Izuna Seikatsu",
+    "provider": "ServerCreator\\ServerCreatorProvider",
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "srvc",
+        "screens": [
+            {
+                "id": "create",
+                "area": "account",
+                "path": "new-server"
+            },
+            {
+                "id": "admin",
+                "area": "admin",
+                "path": "server-creator",
+                "nav": {
+                    "label": "Server Creator",
+                    "icon": "server-cog"
+                }
+            },
+            {
+                "id": "user-tab",
+                "area": "admin",
+                "parent": "admin.user",
+                "path": "server-creator",
+                "nav": {
+                    "label": "Server Creator",
+                    "order": 20
+                }
+            }
+        ]
+    },
+    "icon": "server-cog"
+}
