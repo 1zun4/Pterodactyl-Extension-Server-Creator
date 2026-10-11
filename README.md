@@ -1,9 +1,9 @@
 # Server Creator for Pterodactyl
 
-[![Release](https://img.shields.io/github/v/release/1zun4/Pterodactyl-Extension-Server-Creator?style=flat-square)](https://github.com/1zun4/Pterodactyl-Extension-Server-Creator/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/1zun4/Pterodactyl-Extension-Server-Creator/total?style=flat-square)](https://github.com/1zun4/Pterodactyl-Extension-Server-Creator/releases)
+[![Release](https://img.shields.io/github/v/release/CCBlueX/Pterodactyl-Extension-Server-Creator?style=flat-square)](https://github.com/CCBlueX/Pterodactyl-Extension-Server-Creator/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/CCBlueX/Pterodactyl-Extension-Server-Creator/total?style=flat-square)](https://github.com/CCBlueX/Pterodactyl-Extension-Server-Creator/releases)
 [![Pterodactyl](https://img.shields.io/badge/Pterodactyl-2.0-0e4688?style=flat-square)](https://pterodactyl.io)
-[![License](https://img.shields.io/github/license/1zun4/Pterodactyl-Extension-Server-Creator?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/github/license/CCBlueX/Pterodactyl-Extension-Server-Creator?style=flat-square)](LICENSE)
 
 Let users create their own servers within a quota, and duplicate servers in one click.
 
@@ -11,7 +11,7 @@ Let users create their own servers within a quota, and duplicate servers in one 
 
 ## Install
 
-1. Download `server-creator-<version>.pteroext` from the [latest release](https://github.com/1zun4/Pterodactyl-Extension-Server-Creator/releases/latest).
+1. Download `server-creator-<version>.pteroext` from the [latest release](https://github.com/CCBlueX/Pterodactyl-Extension-Server-Creator/releases/latest).
 2. Install and enable it under **Admin → Extensions**.
 3. Under **Admin → Server Creator**, add a game and give users a quota.
 
