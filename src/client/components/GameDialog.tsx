@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Dialog, Input, Label, Select, Switch } from '@pterodactyl/sdk';
 import { keys, searchSteam, type Admin, type Game, type GameInput } from '../api';
+import { formatSize } from '../lib/resources';
 import Artwork from './Artwork';
 
 const RANGES = [
@@ -100,7 +101,7 @@ export default function GameDialog({ game, eggs, pending, onClose, onSave }: Pro
                         <Select id='srvc-docker' placeholder='Egg default' value={input.docker_image} onChange={(value) => set({ docker_image: String(value) || null })} options={egg.images.map((image) => ({ value: image, label: image }))} />
                     </div>
                 )}
-                <div className='srvc:grid srvc:grid-cols-2 srvc:gap-4 srvc:sm:grid-cols-3'>
+                <div className='srvc:grid srvc:gap-4 srvc:sm:grid-cols-3'>
                     {RANGES.map(({ key, label }) => (
                         <div key={key} className='srvc:grid srvc:gap-2'>
                             <Label htmlFor={`srvc-${key}-min`}>{label}</Label>
@@ -109,6 +110,9 @@ export default function GameDialog({ game, eggs, pending, onClose, onSave }: Pro
                                 <span className='srvc:text-muted-foreground'>–</span>
                                 <Input aria-label={`${label} maximum`} type='number' min={0} value={input[`${key}_max`]} onChange={(event) => set({ [`${key}_max`]: Number(event.currentTarget.value) })} />
                             </div>
+                            <p className={`srvc:text-xs ${input[`${key}_min`] > input[`${key}_max`] ? 'srvc:text-destructive' : 'srvc:text-muted-foreground'}`}>
+                                {formatSize(key, input[`${key}_min`])} to {formatSize(key, input[`${key}_max`])}
+                            </p>
                         </div>
                     ))}
                 </div>

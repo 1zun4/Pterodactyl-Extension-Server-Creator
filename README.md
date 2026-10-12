@@ -17,9 +17,9 @@ Let users create their own servers within a quota, and duplicate servers in one 
 
 ## Features
 
-- **Game picker**: users pick from the games you offer, with Steam artwork or your own images.
+- **Game picker**: users pick a game, then size it with sliders in GiB and cores. Shows what's left and a recommended size.
 - **Quotas**: limit servers, memory, disk, CPU, databases, backups and ports, for everyone or per user.
-- **Resize and delete**: owners change their server's resources on its Settings page. Deleting is opt-in.
+- **Resize and delete**: owners resize with the same sliders on the Settings page. Deleting is opt-in.
 - **Safe placement**: new servers only go to nodes with room, in the locations you choose.
 - **Duplicate**: copy any server from its admin page, optionally with all its files.
 

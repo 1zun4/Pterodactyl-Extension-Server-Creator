@@ -98,7 +98,7 @@ final class AdminController
         return new JsonResponse([
             'custom' => $own?->limits(),
             'quota' => $this->quotas->summary($user),
-            'servers' => OwnedServer::query()->with(['server:id,uuid,name', 'game:id,name'])->where('user_id', $user->id)->get()->map(static fn (OwnedServer $owned): array => [
+            'servers' => OwnedServer::query()->with(['server' => static fn ($query) => $query->without('allocation')->select(['id', 'name']), 'game:id,name'])->where('user_id', $user->id)->get()->map(static fn (OwnedServer $owned): array => [
                 'id' => $owned->server->id,
                 'name' => $owned->server->name,
                 'game' => $owned->game?->name,
@@ -142,8 +142,10 @@ final class AdminController
 
     public function copies(int $id): JsonResponse
     {
+        $names = static fn ($query) => $query->without('allocation')->select(['id', 'name']);
+
         return new JsonResponse(['copies' => Copy::query()
-            ->with(['source:id,name', 'target:id,name'])
+            ->with(['source' => $names, 'target' => $names])
             ->where(static fn ($query) => $query->where('source_id', $id)->orWhere('target_id', $id))
             ->latest()
             ->limit(5)

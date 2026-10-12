@@ -26,7 +26,7 @@ final class ClientController
             'games' => $summary['limits']['servers'] > 0
                 ? Game::query()->with('egg')->where('enabled', true)->orderBy('sort')->orderBy('name')->get()->map(static fn (Game $game): array => Presenter::game($game, true))
                 : [],
-            'servers' => OwnedServer::query()->with(['server:id,uuid,name', 'game:id,name'])->where('user_id', $user->id)->get()->map(static fn (OwnedServer $owned): array => [
+            'servers' => OwnedServer::query()->with(['server' => static fn ($query) => $query->without('allocation')->select(['id', 'uuidShort', 'name']), 'game:id,name'])->where('user_id', $user->id)->get()->map(static fn (OwnedServer $owned): array => [
                 'identifier' => $owned->server->uuidShort,
                 'name' => $owned->server->name,
                 'game' => $owned->game?->name,

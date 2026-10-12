@@ -4,7 +4,7 @@ import { createExtensionTestHost } from '@pterodactyl/sdk/testing';
 import * as api from '../api';
 import CreateScreen from './CreateScreen';
 
-const game = (id: number, name: string, memory_min: number): api.Game => ({
+const game = (id: number, name: string, memory_min: number, cpu_max = 200): api.Game => ({
     id,
     egg_id: id,
     egg: 'Egg',
@@ -21,7 +21,7 @@ const game = (id: number, name: string, memory_min: number): api.Game => ({
     disk_min: 5120,
     disk_max: 20480,
     cpu_min: 100,
-    cpu_max: 200,
+    cpu_max,
     databases: 0,
     backups: 0,
     allocations: 0,
@@ -30,7 +30,7 @@ const game = (id: number, name: string, memory_min: number): api.Game => ({
 
 const limits = (servers: number, memory: number): api.Limits => ({ servers, memory, disk: 30720, cpu: 300, databases: 0, backups: 0, allocations: 0 });
 
-vi.mock('../api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api')>()), getOverview: vi.fn() }));
+vi.mock('../api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api')>()), getOverview: vi.fn(), createServer: vi.fn() }));
 
 afterEach(cleanup);
 
@@ -52,9 +52,39 @@ test('offers games that fit and fills in their defaults', async () => {
     fireEvent.click(screen.getByRole('button', { name: /Paper/ }));
 
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Paper');
-    expect((screen.getByLabelText('Memory (MiB)') as HTMLInputElement).value).toBe('1024');
+    expect(screen.getByRole('slider', { name: 'Memory' }).getAttribute('aria-valuetext')).toBe('1 GiB');
+    expect(screen.getByText('2 GiB of 6 GiB left')).toBeTruthy();
     expect((screen.getByLabelText(/Version/) as HTMLInputElement).value).toBe('latest');
-    expect(screen.getByText('Between 1 GiB and 3 GiB.')).toBeTruthy();
+    host.dispose();
+});
+
+test('picks sizes with sliders and presets but sends MiB and percent', async () => {
+    vi.mocked(api.getOverview).mockResolvedValue({ quota: { limits: limits(2, 6144), used: limits(0, 0), remaining: limits(2, 3072) }, games: [game(1, 'Paper', 1024)], servers: [] });
+    vi.mocked(api.createServer).mockResolvedValue({ identifier: 'abcd1234' });
+    const host = renderScreen();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Paper/ }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Recommended: 2 GiB' })[0]);
+    expect(screen.getByRole('slider', { name: 'Memory' }).getAttribute('aria-valuetext')).toBe('2 GiB');
+    expect(screen.getByText('1 GiB of 6 GiB left')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Disk' }), { target: { value: '5' } });
+    expect(screen.getByRole('slider', { name: 'Disk' }).getAttribute('aria-valuetext')).toBe('10 GiB');
+    expect(screen.getByRole('slider', { name: 'CPU' }).getAttribute('aria-valuetext')).toBe('1 core');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create server' }));
+    await vi.waitFor(() => expect(api.createServer).toHaveBeenCalledWith({ game: 1, name: 'Paper', memory: 2048, disk: 10240, cpu: 100, environment: { VERSION: 'latest' } }));
+    host.dispose();
+});
+
+test('shows a size the plan pins as text', async () => {
+    vi.mocked(api.getOverview).mockResolvedValue({ quota: { limits: limits(2, 6144), used: limits(0, 0), remaining: limits(2, 3072) }, games: [game(1, 'Paper', 1024, 100)], servers: [] });
+    const host = renderScreen();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Paper/ }));
+
+    expect(screen.getByText('(set by your plan)')).toBeTruthy();
+    expect(screen.queryByRole('slider', { name: 'CPU' })).toBeNull();
     host.dispose();
 });
 

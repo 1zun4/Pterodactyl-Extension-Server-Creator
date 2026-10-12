@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Dialog, Input, Label, TitledGreyBox, httpErrorToHuman, invalidateServerData, toast, useCurrentServerRequired, usePanelNavigate } from '@pterodactyl/sdk';
-import { deleteServer, getOwnedServer, keys, resizeServer } from '../api';
-import { formatResource } from '../lib/format';
+import { Button, Dialog, Input, TitledGreyBox, httpErrorToHuman, invalidateServerData, toast, useCurrentServerRequired, usePanelNavigate } from '@pterodactyl/sdk';
+import { deleteServer, getOwnedServer, keys, resizeServer, type OwnedServer } from '../api';
+import ResourceSlider from './ResourceSlider';
 
 const SIZED = [
-    { key: 'memory', label: 'Memory (MiB)' },
-    { key: 'disk', label: 'Disk (MiB)' },
-    { key: 'cpu', label: 'CPU (%)' },
+    { key: 'memory', label: 'Memory' },
+    { key: 'disk', label: 'Disk' },
+    { key: 'cpu', label: 'CPU' },
 ] as const;
+
+/** The server's current sizes, with anything the plan pins to one value set to that value. */
+function startingSizes({ current, limits }: Required<Pick<OwnedServer, 'current' | 'limits'>>) {
+    return Object.fromEntries(SIZED.map(({ key }) => [key, limits[key].min === limits[key].max ? limits[key].min : current[key]])) as Record<(typeof SIZED)[number]['key'], number>;
+}
 
 /** Resize and delete on the Settings page, for servers the user created themselves. */
 export default function ResourcesBox() {
@@ -20,7 +25,9 @@ export default function ResourcesBox() {
     const [deleting, setDeleting] = useState(false);
     const [confirm, setConfirm] = useState('');
 
-    useEffect(() => owned.data?.current && setSizes(owned.data.current), [owned.data]);
+    useEffect(() => {
+        owned.data?.current && owned.data.limits && setSizes(startingSizes({ current: owned.data.current, limits: owned.data.limits }));
+    }, [owned.data]);
 
     const resizing = useMutation({
         mutationFn: () => resizeServer(server.identifier, sizes),
@@ -51,20 +58,27 @@ export default function ResourcesBox() {
     const valid = SIZED.every(({ key }) => sizes[key] >= data.limits![key].min && sizes[key] <= data.limits![key].max);
 
     return (
-        <div className='srvc:mx-4 srvc:mt-4 srvc:grid srvc:max-w-panel srvc:gap-6 srvc:sm:mt-6 srvc:xl:mx-auto srvc:lg:grid-cols-2'>
+        <div className='srvc:mx-4 srvc:mt-4 srvc:grid srvc:max-w-panel srvc:items-start srvc:gap-6 srvc:sm:mt-6 srvc:xl:mx-auto srvc:lg:grid-cols-2'>
             {data.allow_resize && (
                 <TitledGreyBox title='Resources'>
-                    <div className='srvc:grid srvc:gap-4 srvc:sm:grid-cols-3'>
+                    <div className='srvc:grid srvc:gap-6'>
                         {SIZED.map(({ key, label }) => (
-                            <div key={key}>
-                                <Label htmlFor={`srvc-${key}`}>{label}</Label>
-                                <Input id={`srvc-${key}`} type='number' min={data.limits![key].min} max={data.limits![key].max} value={sizes[key]} onChange={(event) => setSizes({ ...sizes, [key]: Number(event.currentTarget.value) })} />
-                                <p className='srvc:mt-1 srvc:text-xs srvc:text-muted-foreground'>Up to {formatResource(key, data.limits![key].max)}</p>
-                            </div>
+                            <ResourceSlider
+                                key={key}
+                                id={`srvc-${key}`}
+                                resource={key}
+                                label={label}
+                                value={sizes[key]}
+                                min={data.limits![key].min}
+                                max={data.limits![key].max}
+                                onChange={(value) => setSizes((current) => ({ ...current, [key]: value }))}
+                                quota={data.quota?.[key]}
+                                suggest={Boolean(data.game)}
+                            />
                         ))}
                     </div>
-                    <div className='srvc:mt-4 srvc:flex srvc:justify-end'>
-                        <Button size='small' disabled={!changed || !valid} isLoading={resizing.isPending} onClick={() => resizing.mutate()}>
+                    <div className='srvc:mt-6 srvc:flex srvc:justify-end'>
+                        <Button size='small' className='srvc:w-full srvc:sm:w-auto' disabled={!changed || !valid} isLoading={resizing.isPending} onClick={() => resizing.mutate()}>
                             Save
                         </Button>
                     </div>

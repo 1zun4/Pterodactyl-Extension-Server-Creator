@@ -13,6 +13,7 @@ use ServerCreator\Exceptions\CreatorException;
 use ServerCreator\Models\Game;
 use ServerCreator\Models\OwnedServer;
 use ServerCreator\Panel\Panel;
+use ServerCreator\Support\Quota;
 
 /**
  * Creating, resizing and deleting the servers users made themselves.
@@ -69,10 +70,7 @@ final readonly class ServerManager
     public function resize(User $user, Server $server, int $memory, int $disk, int $cpu): Server
     {
         $owned = $this->owned($user, $server);
-
-        if ($owned->game !== null) {
-            $this->assertWithin($owned->game, compact('memory', 'disk', 'cpu'));
-        }
+        $this->assertWithin($owned->game, compact('memory', 'disk', 'cpu'));
 
         $resources = ['memory' => $memory, 'disk' => $disk, 'cpu' => $cpu, 'databases' => (int) $server->database_limit, 'backups' => (int) $server->backup_limit, 'allocations' => (int) $server->allocation_limit];
         $this->assertQuota($this->quotas->for($user)->exceeded($resources, $this->quotas->used($user, $server), false));
@@ -97,12 +95,21 @@ final readonly class ServerManager
         );
     }
 
-    /** @param array{memory: int, disk: int, cpu: int} $resources */
-    private function assertWithin(Game $game, array $resources): void
+    /**
+     * Servers whose game was deleted still may not drop to 0, which Pterodactyl treats as unlimited.
+     *
+     * @param  array{memory: int, disk: int, cpu: int}  $resources
+     */
+    private function assertWithin(?Game $game, array $resources): void
     {
         foreach (['memory', 'disk', 'cpu'] as $resource) {
-            if ($resources[$resource] < $game->{"{$resource}_min"} || $resources[$resource] > $game->{"{$resource}_max"}) {
-                throw new CreatorException(sprintf('%s has to be between %d and %d.', ucfirst(self::NAMES[$resource]), $game->{"{$resource}_min"}, $game->{"{$resource}_max"}));
+            $min = $game?->{"{$resource}_min"} ?? Quota::SMALLEST[$resource];
+            $max = $game?->{"{$resource}_max"} ?? PHP_INT_MAX;
+
+            if ($resources[$resource] < $min || $resources[$resource] > $max) {
+                throw new CreatorException($game === null
+                    ? sprintf('%s has to be at least %d.', ucfirst(self::NAMES[$resource]), $min)
+                    : sprintf('%s has to be between %d and %d.', ucfirst(self::NAMES[$resource]), $min, $max));
             }
         }
     }

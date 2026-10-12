@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Label, PageContentBlock, Spinner, TitledGreyBox, httpErrorToHuman, toast, usePanelNavigate } from '@pterodactyl/sdk';
 import { createServer, getOverview, keys, type Game, type Limits } from '../api';
 import Artwork from '../components/Artwork';
-import { formatResource, remainingText } from '../lib/format';
+import ResourceSlider from '../components/ResourceSlider';
+import { remainingText } from '../lib/format';
+import { formatSize, type Sized } from '../lib/resources';
 
-type Sized = 'memory' | 'disk' | 'cpu';
-const SIZED: { key: Sized; label: string; unit: string }[] = [
-    { key: 'memory', label: 'Memory', unit: 'MiB' },
-    { key: 'disk', label: 'Disk', unit: 'MiB' },
-    { key: 'cpu', label: 'CPU', unit: '%' },
+const SIZED: { key: Sized; label: string }[] = [
+    { key: 'memory', label: 'Memory' },
+    { key: 'disk', label: 'Disk' },
+    { key: 'cpu', label: 'CPU' },
 ];
 
 /** The range a user may pick from: the game's limits, capped by what is left of their quota. */
@@ -21,7 +22,11 @@ function shortfall(game: Game, remaining: Limits): string | null {
     const missing = SIZED.find(({ key }) => range(game, remaining, key).min > range(game, remaining, key).max);
     const feature = (['databases', 'backups', 'allocations'] as const).find((key) => game[key] > remaining[key]);
 
-    return missing ? `Needs ${formatResource(missing.key, game[`${missing.key}_min`])} ${missing.label.toLowerCase()}` : feature ? 'Not enough left in your quota' : null;
+    if (missing) {
+        return `Needs ${formatSize(missing.key, game[`${missing.key}_min`])}${missing.key === 'cpu' ? '' : ` ${missing.label.toLowerCase()}`}`;
+    }
+
+    return feature ? 'Not enough left in your quota' : null;
 }
 
 export default function CreateScreen() {
@@ -32,6 +37,7 @@ export default function CreateScreen() {
     const [name, setName] = useState('');
     const [sizes, setSizes] = useState<Record<Sized, number>>({ memory: 0, disk: 0, cpu: 0 });
     const [environment, setEnvironment] = useState<Record<string, string>>({});
+    const setup = useRef<HTMLElement>(null);
 
     const creation = useMutation({
         mutationFn: () => createServer({ game: game!.id, name: name.trim(), ...sizes, environment }),
@@ -45,9 +51,14 @@ export default function CreateScreen() {
 
     const pick = (picked: Game, remaining: Limits) => {
         setGame(picked);
-        setName((current) => current || picked.name);
+        setName((current) => (current === '' || current === game?.name ? picked.name : current));
         setSizes({ memory: range(picked, remaining, 'memory').min, disk: range(picked, remaining, 'disk').min, cpu: range(picked, remaining, 'cpu').min });
         setEnvironment(Object.fromEntries((picked.variables ?? []).map((variable) => [variable.key, variable.default])));
+        // On phones the setup step starts below the game list, so bring it into view.
+        requestAnimationFrame(() => {
+            const top = setup.current?.getBoundingClientRect().top;
+            top !== undefined && top > window.innerHeight * 0.75 && setup.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
     };
 
     if (!overview.data) {
@@ -58,7 +69,7 @@ export default function CreateScreen() {
         );
     }
 
-    const { remaining } = overview.data.quota;
+    const { remaining, limits } = overview.data.quota;
     const valid = game !== null && name.trim() !== '' && SIZED.every(({ key }) => sizes[key] >= range(game, remaining, key).min && sizes[key] <= range(game, remaining, key).max);
 
     return (
@@ -74,7 +85,7 @@ export default function CreateScreen() {
                 <div className='srvc:grid srvc:gap-6'>
                     <section>
                         <h2 className='srvc:mb-3 srvc:font-header srvc:text-sm srvc:font-semibold srvc:uppercase srvc:tracking-wide srvc:text-foreground'>1. Pick a game</h2>
-                        <div className='srvc:grid srvc:grid-cols-1 srvc:gap-4 srvc:sm:grid-cols-2 srvc:lg:grid-cols-4'>
+                        <div className='srvc:grid srvc:grid-cols-2 srvc:gap-3 srvc:sm:gap-4 srvc:lg:grid-cols-4'>
                             {overview.data.games.map((item) => {
                                 const blocked = shortfall(item, remaining);
                                 const selected = game?.id === item.id;
@@ -86,12 +97,12 @@ export default function CreateScreen() {
                                         disabled={blocked !== null}
                                         aria-pressed={selected}
                                         onClick={() => pick(item, remaining)}
-                                        className={`srvc:flex srvc:flex-col srvc:gap-3 srvc:rounded-sm srvc:border srvc:bg-card srvc:p-3 srvc:text-left srvc:transition-colors disabled:srvc:cursor-not-allowed disabled:srvc:opacity-50 ${selected ? 'srvc:border-primary' : 'srvc:border-transparent srvc:hover:border-border'}`}
+                                        className={`srvc:flex srvc:min-w-0 srvc:flex-col srvc:gap-2 srvc:rounded-sm srvc:border-2 srvc:bg-card srvc:p-2 srvc:text-left srvc:sm:gap-3 srvc:sm:p-3 srvc:transition-colors srvc:disabled:cursor-not-allowed srvc:disabled:opacity-50 ${selected ? 'srvc:border-primary' : 'srvc:border-transparent srvc:enabled:hover:border-border'}`}
                                     >
                                         <Artwork src={item.artwork} name={item.name} />
                                         <div className='srvc:min-w-0'>
-                                            <p className='srvc:truncate srvc:font-medium srvc:text-foreground'>{item.name}</p>
-                                            <p className='srvc:line-clamp-2 srvc:text-xs srvc:text-muted-foreground'>{blocked ?? item.description ?? `${formatResource('memory', item.memory_min)} to ${formatResource('memory', item.memory_max)} memory`}</p>
+                                            <p className='srvc:line-clamp-2 srvc:break-words srvc:font-medium srvc:text-foreground'>{item.name}</p>
+                                            <p className='srvc:line-clamp-2 srvc:text-xs srvc:text-muted-foreground'>{blocked ?? item.description ?? `${formatSize('memory', item.memory_min)} to ${formatSize('memory', item.memory_max)} memory`}</p>
                                         </div>
                                     </button>
                                 );
@@ -100,7 +111,7 @@ export default function CreateScreen() {
                     </section>
 
                     {game && (
-                        <section>
+                        <section ref={setup} className='srvc:scroll-mt-4'>
                             <h2 className='srvc:mb-3 srvc:font-header srvc:text-sm srvc:font-semibold srvc:uppercase srvc:tracking-wide srvc:text-foreground'>2. Set it up</h2>
                             <form
                                 className='srvc:grid srvc:gap-6 srvc:lg:grid-cols-2'
@@ -110,24 +121,27 @@ export default function CreateScreen() {
                                 }}
                             >
                                 <TitledGreyBox title='Server'>
-                                    <div className='srvc:grid srvc:gap-4'>
+                                    <div className='srvc:grid srvc:gap-6'>
                                         <div>
                                             <Label htmlFor='srvc-name'>Name</Label>
                                             <Input id='srvc-name' maxLength={191} value={name} onChange={(event) => setName(event.currentTarget.value)} />
                                         </div>
-                                        {SIZED.map(({ key, label, unit }) => {
+                                        {SIZED.map(({ key, label }) => {
                                             const { min, max } = range(game, remaining, key);
 
                                             return (
-                                                <div key={key}>
-                                                    <Label htmlFor={`srvc-${key}`}>
-                                                        {label} ({unit})
-                                                    </Label>
-                                                    <Input id={`srvc-${key}`} type='number' min={min} max={max} value={sizes[key]} onChange={(event) => setSizes({ ...sizes, [key]: Number(event.currentTarget.value) })} />
-                                                    <p className='srvc:mt-1 srvc:text-xs srvc:text-muted-foreground'>
-                                                        Between {formatResource(key, min)} and {formatResource(key, max)}.
-                                                    </p>
-                                                </div>
+                                                <ResourceSlider
+                                                    key={`${game.id}-${key}`}
+                                                    id={`srvc-${key}`}
+                                                    resource={key}
+                                                    label={label}
+                                                    value={sizes[key]}
+                                                    min={min}
+                                                    max={max}
+                                                    onChange={(value) => setSizes((current) => ({ ...current, [key]: value }))}
+                                                    quota={{ available: remaining[key], limit: limits[key] }}
+                                                    suggest
+                                                />
                                             );
                                         })}
                                     </div>
@@ -142,11 +156,11 @@ export default function CreateScreen() {
                                                     {variable.required && ' *'}
                                                 </Label>
                                                 <Input id={`srvc-var-${variable.key}`} value={environment[variable.key] ?? ''} onChange={(event) => setEnvironment({ ...environment, [variable.key]: event.currentTarget.value })} />
-                                                {variable.description && <p className='srvc:mt-1 srvc:text-xs srvc:text-muted-foreground'>{variable.description}</p>}
+                                                {variable.description && <p className='srvc:mt-1 srvc:text-xs srvc:break-words srvc:text-muted-foreground'>{variable.description}</p>}
                                             </div>
                                         ))}
                                         <div className='srvc:flex srvc:justify-end srvc:pt-2'>
-                                            <Button type='submit' disabled={!valid} isLoading={creation.isPending}>
+                                            <Button type='submit' className='srvc:w-full srvc:sm:w-auto' disabled={!valid} isLoading={creation.isPending}>
                                                 Create server
                                             </Button>
                                         </div>

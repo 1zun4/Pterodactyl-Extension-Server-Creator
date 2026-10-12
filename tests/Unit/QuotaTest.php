@@ -20,4 +20,10 @@ final class QuotaTest extends TestCase
         $this->assertSame('databases', $quota->exceeded(['memory' => 512, 'databases' => 1], $used));
         $this->assertSame('servers', $quota->exceeded(['memory' => 512], ['servers' => 2]));
     }
+
+    public function test_smallest_sizes_never_mean_unlimited(): void
+    {
+        $this->assertSame(['memory', 'disk', 'cpu'], array_keys(Quota::SMALLEST));
+        $this->assertGreaterThan(0, min(Quota::SMALLEST));
+    }
 }

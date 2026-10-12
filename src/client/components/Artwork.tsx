@@ -9,7 +9,9 @@ export default function Artwork({ src, name, className = '' }: { src: string | n
             {src && !failed ? (
                 <img src={src} alt='' loading='lazy' referrerPolicy='no-referrer' onError={() => setFailed(true)} className='srvc:h-full srvc:w-full srvc:object-cover' />
             ) : (
-                <span className='srvc:absolute srvc:inset-0 srvc:flex srvc:items-center srvc:justify-center srvc:p-3 srvc:text-center srvc:font-header srvc:text-lg srvc:font-semibold srvc:text-muted-foreground'>{name}</span>
+                <span className='srvc:absolute srvc:inset-0 srvc:flex srvc:items-center srvc:justify-center srvc:p-2 srvc:text-center srvc:font-header srvc:text-sm srvc:font-semibold srvc:text-muted-foreground srvc:sm:p-3 srvc:sm:text-lg'>
+                    <span className='srvc:line-clamp-2 srvc:break-words'>{name}</span>
+                </span>
             )}
         </div>
     );

@@ -11,6 +11,9 @@ final readonly class Quota
 {
     public const array RESOURCES = ['servers', 'memory', 'disk', 'cpu', 'databases', 'backups', 'allocations'];
 
+    /** The smallest size a self-created server may have; 0 would mean unlimited to Pterodactyl. */
+    public const array SMALLEST = ['memory' => 64, 'disk' => 128, 'cpu' => 10];
+
     /** @param array<string, int> $limits */
     public function __construct(public array $limits) {}
 

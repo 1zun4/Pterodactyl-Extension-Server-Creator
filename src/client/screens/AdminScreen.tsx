@@ -6,7 +6,7 @@ import Artwork from '../components/Artwork';
 import GameDialog from '../components/GameDialog';
 import QuotaFields from '../components/QuotaFields';
 import UserSelect from '../components/UserSelect';
-import { formatMiB } from '../lib/format';
+import { formatCpu, formatMiB } from '../lib/resources';
 
 export default function AdminScreen() {
     const queryClient = useQueryClient();
@@ -61,7 +61,7 @@ export default function AdminScreen() {
                                             {game.enabled ? game.egg : `Hidden · ${game.egg}`}
                                         </p>
                                         <p className='srvc:mt-1 srvc:text-xs srvc:text-muted-foreground'>
-                                            {formatMiB(game.memory_min)}–{formatMiB(game.memory_max)} memory · {formatMiB(game.disk_min)}–{formatMiB(game.disk_max)} disk
+                                            {formatMiB(game.memory_min)}–{formatMiB(game.memory_max)} memory · {formatMiB(game.disk_min)}–{formatMiB(game.disk_max)} disk · {formatCpu(game.cpu_min)}–{formatCpu(game.cpu_max)}
                                         </p>
                                     </div>
                                     <div className='srvc:flex srvc:justify-end srvc:gap-2'>

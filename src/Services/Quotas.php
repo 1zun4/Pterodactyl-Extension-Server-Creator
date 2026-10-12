@@ -27,6 +27,7 @@ final class Quotas
     public function used(User $user, ?Server $except = null): array
     {
         $servers = Server::query()
+            ->without('allocation')
             ->whereIn('id', OwnedServer::query()->where('user_id', $user->id)->select('server_id'))
             ->when($except, static fn ($query) => $query->whereKeyNot($except->id))
             ->get(['id', 'memory', 'disk', 'cpu', 'database_limit', 'backup_limit', 'allocation_limit']);

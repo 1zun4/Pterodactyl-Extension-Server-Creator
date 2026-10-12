@@ -65,6 +65,8 @@ export interface OwnedServer {
     game?: string | null;
     current?: { memory: number; disk: number; cpu: number };
     limits?: Record<'memory' | 'disk' | 'cpu', { min: number; max: number }>;
+    /** The plan's total, and what is left of it for this server. */
+    quota?: Record<'memory' | 'disk' | 'cpu', { limit: number; available: number }>;
 }
 
 export interface Admin {
