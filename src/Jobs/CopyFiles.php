@@ -102,7 +102,7 @@ final class CopyFiles implements ShouldQueue
 
             case 'cleanup':
                 $backup && $panel->deleteBackup($backup);
-                $copy->update(['step' => 'done']);
+                $copy->update(['step' => $copy->error === null ? 'done' : 'failed']);
 
                 return null;
         }

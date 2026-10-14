@@ -11,6 +11,7 @@ use Pterodactyl\Contracts\Backups\RestoresBackups;
 use Pterodactyl\Contracts\Servers\CreatesServers;
 use Pterodactyl\Contracts\Servers\DeletesServers;
 use Pterodactyl\Contracts\Servers\UpdatesServerBuild;
+use Pterodactyl\Exceptions\Service\Deployment\NoViableAllocationException;
 use Pterodactyl\Facades\Activity;
 use Pterodactyl\Facades\Extensions;
 use Pterodactyl\Models\Allocation;
@@ -20,7 +21,6 @@ use Pterodactyl\Models\Node;
 use Pterodactyl\Models\Objects\DeploymentObject;
 use Pterodactyl\Models\Server;
 use Pterodactyl\Models\User;
-use Pterodactyl\Services\Deployment\AllocationSelectionService;
 use Pterodactyl\Services\Servers\VariableValidatorService;
 
 /**
@@ -46,8 +46,7 @@ final readonly class Panel
     public function environment(Egg $egg, array $values): array
     {
         $validated = app(VariableValidatorService::class)
-            ->setUserLevel(User::USER_LEVEL_USER)
-            ->handle($egg, $values)
+            ->validate($egg, $values, User::USER_LEVEL_USER)
             ->filter(static fn ($variable): bool => $variable->value !== null)
             ->mapWithKeys(static fn ($variable): array => [$variable->key => (string) $variable->value]);
 
@@ -74,7 +73,8 @@ final readonly class Panel
 
     public function freeAllocation(Node $node): Allocation
     {
-        return app(AllocationSelectionService::class)->setDedicated(false)->setNodes([$node->id])->setPorts([])->handle();
+        return Allocation::query()->unassigned()->onNodes([$node->id])->inRandomOrder()->first()
+            ?? throw new NoViableAllocationException(trans('exceptions.deployment.no_viable_allocations'));
     }
 
     /** Only memory, disk and CPU change. The feature limits are always written, so they are passed along unchanged. */

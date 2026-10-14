@@ -17,14 +17,15 @@ final readonly class RestoreListener implements RestoresBackupStatuses
 {
     public function __construct(private RestoresBackupStatuses $inner) {}
 
-    public function restoreStatus(string $backupUuid, Node $node): Backup
+    public function restoreStatus(string $backupUuid, Node $node, bool $successful): Backup
     {
-        $backup = $this->inner->restoreStatus($backupUuid, $node);
+        $backup = $this->inner->restoreStatus($backupUuid, $node, $successful);
         $copy = Copy::query()->with('target')->where('backup_uuid', $backupUuid)->where('step', 'restoring')->first();
 
         if ($copy !== null) {
             $copy->target->update(['status' => null]);
-            $copy->update(['step' => 'cleanup']);
+            // Cleanup runs either way so the temporary backup goes; a failed restore ends the copy as failed.
+            $copy->update($successful ? ['step' => 'cleanup'] : ['step' => 'cleanup', 'error' => 'Wings could not restore the files into the copy.']);
             CopyFiles::dispatch($copy->id);
         }
 
