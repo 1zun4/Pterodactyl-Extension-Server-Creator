@@ -41,7 +41,7 @@ final class PopularGames
         $installed = [];
 
         foreach ($eggs as $egg) {
-            $installed[mb_strtolower(['name'])] ??= $egg['id'];
+            $installed[mb_strtolower($egg['name'])] ??= $egg['id'];
         }
 
         $games = [];
