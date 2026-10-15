@@ -64,7 +64,7 @@ test('picks sizes with sliders and presets but sends MiB and percent', async () 
     const host = renderScreen();
 
     fireEvent.click(await screen.findByRole('button', { name: /Paper/ }));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Recommended: 2 GiB' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Use the recommended 2 GiB' }));
     expect(screen.getByRole('slider', { name: 'Memory' }).getAttribute('aria-valuetext')).toBe('2 GiB');
     expect(screen.getByText('1 GiB of 6 GiB left')).toBeTruthy();
 
@@ -77,14 +77,15 @@ test('picks sizes with sliders and presets but sends MiB and percent', async () 
     host.dispose();
 });
 
-test('shows a size the plan pins as text', async () => {
+test('shows a size the plan pins as a locked slider', async () => {
     vi.mocked(api.getOverview).mockResolvedValue({ quota: { limits: limits(2, 6144), used: limits(0, 0), remaining: limits(2, 3072) }, games: [game(1, 'Paper', 1024, 100)], servers: [] });
     const host = renderScreen();
 
     fireEvent.click(await screen.findByRole('button', { name: /Paper/ }));
 
-    expect(screen.getByText('(set by your plan)')).toBeTruthy();
-    expect(screen.queryByRole('slider', { name: 'CPU' })).toBeNull();
+    expect(screen.getByText('Set by your plan')).toBeTruthy();
+    expect((screen.getByRole('slider', { name: 'CPU' }) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByRole('slider', { name: 'CPU' }).getAttribute('aria-valuetext')).toBe('1 core');
     host.dispose();
 });
 

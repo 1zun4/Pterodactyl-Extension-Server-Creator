@@ -93,23 +93,54 @@ export function ticks(resource: Sized, scale: Scale): Mark[] {
     return STOPS[resource].filter((value) => value > scale.min && value < scale.max).map((value) => ({ value, at: positionOf(scale, value) }));
 }
 
-/** Labels under the track: both ends, plus the ticks that leave at least `gap` of room to their neighbours. */
-export function labels(resource: Sized, scale: Scale, gap = 0.2): Mark[] {
-    if (scale.max <= scale.min) return [{ value: scale.min, at: 0 }];
+/** Labels under the track: both ends, then `keep` and the ticks that leave at least `gap` of room to every other label. */
+export function labels(resource: Sized, scale: Scale, gap = 0.2, keep: number | null = null): Mark[] {
+    if (scale.max <= scale.min) return [{ value: scale.max, at: 1 }];
 
-    const kept: Mark[] = [{ value: scale.min, at: 0 }];
+    const kept: Mark[] = [
+        { value: scale.min, at: 0 },
+        { value: scale.max, at: 1 },
+    ];
+    const candidates = [...(keep !== null && keep > scale.min && keep < scale.max ? [{ value: keep, at: positionOf(scale, keep) }] : []), ...ticks(resource, scale)];
 
-    for (const tick of ticks(resource, scale)) {
-        if (tick.at - kept[kept.length - 1].at >= gap && 1 - tick.at >= gap) kept.push(tick);
+    for (const mark of candidates) {
+        if (kept.every((other) => Math.abs(other.at - mark.at) >= gap)) kept.push(mark);
     }
 
-    return [...kept, { value: scale.max, at: 1 }];
+    return kept.sort((a, b) => a.at - b.at);
 }
 
 /** The next common size above the game's minimum, when it still fits. */
 export function recommended(resource: Sized, scale: Scale): number | null {
     return STOPS[resource].find((value) => value > scale.min && value <= scale.max) ?? null;
 }
+
+const FACTORS: Record<string, number> = { mib: 1, m: 1, mb: 1, gib: 1024, g: 1024, gb: 1024, tib: 1024 * 1024, t: 1024 * 1024, tb: 1024 * 1024 };
+
+/** What a user types for an exact size: GiB or cores by default, or with a unit such as "1536 MiB" or "150%". Null when it is not a size. */
+export function parseSize(resource: Sized, text: string): number | null {
+    const match = /^\s*(\d+(?:[.,]\d+)?|[.,]\d+)\s*([a-z%]*)\s*$/i.exec(text);
+
+    if (!match) return null;
+
+    const amount = Number(match[1].replace(',', '.'));
+    const unit = match[2].toLowerCase();
+
+    if (resource === 'cpu') {
+        if (unit === '%') return Math.round(amount);
+
+        return ['', 'c', 'core', 'cores'].includes(unit) ? Math.round(amount * 100) : null;
+    }
+
+    const factor = unit === '' ? 1024 : FACTORS[unit];
+
+    return factor === undefined ? null : Math.round(amount * factor);
+}
+
+/** The value as the exact field shows it: GiB or cores, without the unit. */
+export const editable = (resource: Sized, value: number) => trimmed(value / (resource === 'cpu' ? 100 : 1024));
+
+export const EDIT_UNITS: Record<Sized, string> = { memory: 'GiB', disk: 'GiB', cpu: 'cores' };
 
 /** "2 GiB of 4 GiB left" once `value` is taken out of what is available. */
 export function leftText(resource: Sized, value: number, available: number, limit: number): string {

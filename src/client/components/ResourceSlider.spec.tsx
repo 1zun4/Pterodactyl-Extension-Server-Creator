@@ -33,27 +33,35 @@ test('snaps to 256 MiB steps and still reaches an odd maximum', async () => {
     host.dispose();
 });
 
-test('takes an exact value and clamps it when leaving the field', async () => {
+test('takes an exact value typed on the size and clamps it', async () => {
     const host = renderSlider(1024);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Exact value' }));
-    const input = screen.getByLabelText('Memory in MiB') as HTMLInputElement;
+    fireEvent.click(await screen.findByRole('button', { name: 'Memory: 1 GiB. Type an exact value' }));
+    const input = screen.getByLabelText('Memory in GiB') as HTMLInputElement;
 
-    fireEvent.change(input, { target: { value: '1500' } });
+    expect(input.value).toBe('1');
+    fireEvent.change(input, { target: { value: '1500 MiB' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
     expect(slider().getAttribute('aria-valuetext')).toBe('1.46 GiB');
 
-    fireEvent.change(input, { target: { value: '5000' } });
-    expect(screen.getByText('Pick between 1 GiB and 3.42 GiB.')).toBeTruthy();
-    fireEvent.blur(input);
-    expect(input.value).toBe('3500');
-    expect(screen.queryByText(/Pick between/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Type an exact value/ }));
+    fireEvent.change(screen.getByLabelText('Memory in GiB'), { target: { value: '5' } });
+    fireEvent.blur(screen.getByLabelText('Memory in GiB'));
+    expect(slider().getAttribute('aria-valuetext')).toBe('3.42 GiB');
+
+    fireEvent.click(screen.getByRole('button', { name: /Type an exact value/ }));
+    fireEvent.change(screen.getByLabelText('Memory in GiB'), { target: { value: 'lots' } });
+    fireEvent.keyDown(screen.getByLabelText('Memory in GiB'), { key: 'Escape' });
+    expect(screen.queryByLabelText('Memory in GiB')).toBeNull();
+    expect(slider().getAttribute('aria-valuetext')).toBe('3.42 GiB');
     host.dispose();
 });
 
-test('explains when the plan leaves no room to change the size', async () => {
+test('locks the slider when the plan leaves no room to change the size', async () => {
     const host = renderSlider(2048, 2048, 1024);
 
-    expect(await screen.findByText('(no room left in your plan to change it)')).toBeTruthy();
-    expect(screen.queryByRole('slider')).toBeNull();
+    expect(await screen.findByText('No room left in your plan to change it')).toBeTruthy();
+    expect((slider() as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /Memory: 2 GiB/ }) as HTMLButtonElement).disabled).toBe(true);
     host.dispose();
 });

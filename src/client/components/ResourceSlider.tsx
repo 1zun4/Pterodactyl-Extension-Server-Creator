@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Input, Label } from '@pterodactyl/sdk';
-import { UNITS, clamp, formatSize, indexOf, labels, leftText, positionOf, recommended, scaleFor, stopCount, ticks, valueAt, type Sized } from '../lib/resources';
+import { EDIT_UNITS, clamp, editable, formatSize, indexOf, labels, leftText, parseSize, positionOf, recommended, scaleFor, stopCount, ticks, valueAt, type Sized } from '../lib/resources';
 
 interface Props {
     id: string;
@@ -12,7 +12,7 @@ interface Props {
     onChange: (value: number) => void;
     /** What the plan still has for this server, and the plan's total. */
     quota?: { available: number; limit: number };
-    /** Offer a "Recommended" preset. Only makes sense when a game sets the minimum. */
+    /** Mark a recommended size on the track. Only makes sense when a game sets the minimum. */
     suggest?: boolean;
 }
 
@@ -22,104 +22,125 @@ const thumb = [
     'srvc:focus-visible:[&::-webkit-slider-thumb]:ring-4 srvc:focus-visible:[&::-webkit-slider-thumb]:ring-ring/50 srvc:focus-visible:[&::-moz-range-thumb]:ring-4 srvc:focus-visible:[&::-moz-range-thumb]:ring-ring/50',
 ].join(' ');
 
-const chip = 'srvc:inline-flex srvc:min-h-8 srvc:items-center srvc:rounded-full srvc:border srvc:px-3 srvc:text-xs srvc:font-medium srvc:transition-colors';
+/** Keeps a label inside the track's width when it sits near either end. */
+function placed(at: number) {
+    if (at < 0.1) return { className: 'srvc:-left-3.5', style: undefined };
+    if (at > 0.9) return { className: 'srvc:-right-3.5', style: undefined };
+
+    return { className: 'srvc:-translate-x-1/2', style: { left: `${at * 100}%` } };
+}
 
 /** A memory, disk or CPU picker that reads in GiB and cores but works in the API's MiB and percent. */
 export default function ResourceSlider({ id, resource, label, value, min, max, onChange, quota, suggest = false }: Props) {
-    const [exact, setExact] = useState(false);
     const [draft, setDraft] = useState<string | null>(null);
+    const fixed = max <= min;
     const scale = scaleFor(resource, min, max);
-    const friendly = formatSize(resource, value);
-    const outside = value < min || value > max;
-    const hint = quota && <p className='srvc:text-xs srvc:text-muted-foreground'>{leftText(resource, value, quota.available, quota.limit)}</p>;
+    const shown = fixed && max === min ? min : value;
+    const friendly = formatSize(resource, shown);
+    const outside = !fixed && (value < min || value > max);
+    const suggestion = suggest && !fixed ? recommended(resource, scale) : null;
+    const filled = fixed ? (max < min ? 0 : 1) : outside ? (value > max ? 1 : 0) : positionOf(scale, value);
+    const marks = labels(resource, scale, 0.2, suggestion);
+    const suggested = suggestion === null ? null : positionOf(scale, suggestion);
 
-    if (max <= min) {
-        return (
-            <div className='srvc:grid srvc:gap-1'>
-                <p className='srvc:text-sm srvc:text-foreground'>
-                    <span className='srvc:font-medium srvc:uppercase'>{label}:</span> {formatSize(resource, max < min ? value : min)}{' '}
-                    <span className='srvc:text-muted-foreground'>{max < min ? '(no room left in your plan to change it)' : '(set by your plan)'}</span>
-                </p>
-                {hint}
-            </div>
-        );
-    }
+    const commit = () => {
+        const parsed = draft === null ? null : parseSize(resource, draft);
 
-    const suggestion = suggest ? recommended(resource, scale) : null;
-    const filled = outside ? (value > max ? 1 : 0) : positionOf(scale, value);
-    const unit = UNITS[resource];
+        setDraft(null);
+        parsed !== null && onChange(clamp(parsed, min, max));
+    };
 
     return (
         <div className='srvc:grid srvc:gap-1'>
-            <div className='srvc:flex srvc:items-baseline srvc:justify-between srvc:gap-3'>
+            <div className='srvc:flex srvc:min-h-9 srvc:items-center srvc:justify-between srvc:gap-3'>
                 <Label htmlFor={id}>{label}</Label>
-                <span aria-hidden className={`srvc:font-header srvc:text-lg srvc:font-semibold srvc:tabular-nums ${outside ? 'srvc:text-destructive' : 'srvc:text-foreground'}`}>
-                    {friendly}
-                </span>
+                {draft === null ? (
+                    <button
+                        type='button'
+                        disabled={fixed}
+                        aria-label={`${label}: ${friendly}. Type an exact value`}
+                        title={fixed ? undefined : 'Type an exact value'}
+                        onClick={() => setDraft(editable(resource, value))}
+                        className={`srvc:-mr-1 srvc:rounded-sm srvc:px-1 srvc:font-header srvc:text-lg srvc:font-semibold srvc:tabular-nums srvc:underline-offset-4 srvc:decoration-dashed srvc:decoration-muted-foreground srvc:enabled:cursor-text srvc:enabled:underline srvc:enabled:hover:decoration-primary srvc:focus-visible:outline-2 srvc:focus-visible:outline-ring ${outside || max < min ? 'srvc:text-destructive' : 'srvc:text-foreground'}`}
+                    >
+                        {friendly}
+                    </button>
+                ) : (
+                    <div className='srvc:flex srvc:items-center srvc:gap-2'>
+                        <Input
+                            autoFocus
+                            inputMode='decimal'
+                            aria-label={`${label} in ${EDIT_UNITS[resource]}`}
+                            className='srvc:w-24 srvc:text-right srvc:tabular-nums'
+                            value={draft}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onChange={(event) => setDraft(event.currentTarget.value)}
+                            onBlur={commit}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    commit();
+                                } else if (event.key === 'Escape') {
+                                    setDraft(null);
+                                }
+                            }}
+                        />
+                        <span className='srvc:text-sm srvc:text-muted-foreground'>{EDIT_UNITS[resource]}</span>
+                    </div>
+                )}
             </div>
-            <div className='srvc:relative srvc:h-11'>
+            <div className={`srvc:relative srvc:h-11 ${fixed ? 'srvc:opacity-60' : ''}`}>
                 <div aria-hidden className='srvc:pointer-events-none srvc:absolute srvc:inset-x-3.5 srvc:top-1/2 srvc:h-2 srvc:-translate-y-1/2 srvc:rounded-full srvc:bg-sunken'>
                     <div className='srvc:absolute srvc:inset-y-0 srvc:left-0 srvc:rounded-full srvc:bg-primary' style={{ width: `${filled * 100}%` }} />
                     {ticks(resource, scale).map((tick) => (
-                        <span key={tick.value} className={`srvc:absolute srvc:top-1/2 srvc:size-1.5 srvc:-translate-1/2 srvc:rounded-full ${tick.at <= filled ? 'srvc:bg-primary-foreground/70' : 'srvc:bg-muted-foreground/60'}`} style={{ left: `${tick.at * 100}%` }} />
+                        <span
+                            key={tick.value}
+                            className={`srvc:absolute srvc:top-1/2 srvc:-translate-1/2 srvc:rounded-full ${tick.value === suggestion ? 'srvc:size-2.5 srvc:ring-2 srvc:ring-primary' : 'srvc:size-1.5'} ${tick.at <= filled ? 'srvc:bg-primary-foreground/70' : 'srvc:bg-muted-foreground/60'}`}
+                            style={{ left: `${tick.at * 100}%` }}
+                        />
                     ))}
                 </div>
                 <input
                     id={id}
                     type='range'
                     min={0}
-                    max={stopCount(scale) - 1}
+                    max={fixed ? 1 : stopCount(scale) - 1}
                     step={1}
-                    value={indexOf(scale, value)}
+                    value={fixed ? filled : indexOf(scale, value)}
+                    disabled={fixed}
                     aria-valuetext={friendly}
-                    aria-describedby={quota ? `${id}-left` : undefined}
+                    aria-describedby={quota || fixed ? `${id}-left` : undefined}
                     onChange={(event) => onChange(valueAt(scale, Number(event.currentTarget.value)))}
-                    className={`srvc:relative srvc:block srvc:h-full srvc:w-full srvc:cursor-pointer srvc:appearance-none srvc:bg-transparent srvc:outline-none ${thumb}`}
+                    className={`srvc:relative srvc:block srvc:h-full srvc:w-full srvc:cursor-pointer srvc:appearance-none srvc:bg-transparent srvc:outline-none srvc:disabled:cursor-not-allowed ${thumb}`}
                 />
             </div>
-            <div aria-hidden className='srvc:relative srvc:mx-3.5 srvc:h-4 srvc:text-xs srvc:text-muted-foreground'>
-                {labels(resource, scale).map(({ value: mark, at }) => (
-                    <span key={mark} className={`srvc:absolute srvc:top-0 srvc:whitespace-nowrap ${at === 0 ? 'srvc:-left-3.5' : at === 1 ? 'srvc:-right-3.5' : 'srvc:-translate-x-1/2'}`} style={at > 0 && at < 1 ? { left: `${at * 100}%` } : undefined}>
-                        {formatSize(resource, mark)}
-                    </span>
-                ))}
-            </div>
-            <div className='srvc:mt-1 srvc:flex srvc:flex-wrap srvc:items-center srvc:justify-between srvc:gap-x-3 srvc:gap-y-2'>
-                <div id={`${id}-left`}>{hint}</div>
-                <div className='srvc:flex srvc:flex-wrap srvc:items-center srvc:gap-2'>
-                    {suggestion !== null && (
-                        <button type='button' aria-pressed={value === suggestion} onClick={() => onChange(suggestion)} className={`${chip} ${value === suggestion ? 'srvc:border-primary srvc:bg-primary/10 srvc:text-foreground' : 'srvc:border-border srvc:text-muted-foreground srvc:hover:border-primary srvc:hover:text-foreground'}`}>
-                            Recommended: {formatSize(resource, suggestion)}
-                        </button>
-                    )}
-                    <button type='button' aria-expanded={exact} aria-controls={`${id}-exact`} onClick={() => setExact(!exact)} className={`${chip} srvc:border-transparent srvc:text-muted-foreground srvc:hover:text-foreground`}>
-                        {exact ? 'Hide exact value' : 'Exact value'}
+            <div className={`srvc:relative srvc:mx-3.5 srvc:text-xs srvc:text-muted-foreground ${suggestion === null ? 'srvc:h-4' : 'srvc:h-9'}`}>
+                {marks.map(({ value: mark, at }) => {
+                    const { className, style } = placed(at);
+
+                    return (
+                        <span key={mark} aria-hidden className={`srvc:absolute srvc:top-0 srvc:whitespace-nowrap ${className} ${mark === suggestion ? 'srvc:font-medium srvc:text-primary' : ''}`} style={style}>
+                            {formatSize(resource, mark)}
+                        </span>
+                    );
+                })}
+                {suggestion !== null && suggested !== null && (
+                    <button
+                        type='button'
+                        aria-pressed={value === suggestion}
+                        aria-label={`Use the recommended ${formatSize(resource, suggestion)}`}
+                        onClick={() => onChange(suggestion)}
+                        className={`srvc:absolute srvc:top-4 srvc:whitespace-nowrap srvc:rounded-sm srvc:text-[0.6875rem] srvc:font-medium srvc:uppercase srvc:tracking-wide srvc:text-primary srvc:hover:underline srvc:focus-visible:outline-2 srvc:focus-visible:outline-ring ${placed(suggested).className}`}
+                        style={placed(suggested).style}
+                    >
+                        Recommended
                     </button>
-                </div>
+                )}
             </div>
-            {exact && (
-                <div className='srvc:flex srvc:items-center srvc:gap-2'>
-                    <Input
-                        id={`${id}-exact`}
-                        type='number'
-                        inputMode='numeric'
-                        aria-label={`${label} in ${unit === '%' ? 'percent' : unit}`}
-                        min={min}
-                        max={max}
-                        value={draft ?? String(value)}
-                        onChange={(event) => {
-                            const text = event.currentTarget.value;
-                            setDraft(text);
-                            text !== '' && Number.isInteger(Number(text)) && onChange(Number(text));
-                        }}
-                        onBlur={() => {
-                            setDraft(null);
-                            onChange(clamp(value, min, max));
-                        }}
-                    />
-                    <span className='srvc:shrink-0 srvc:text-sm srvc:text-muted-foreground'>{unit}</span>
-                </div>
-            )}
+            <div id={`${id}-left`} className='srvc:mt-1 srvc:flex srvc:flex-wrap srvc:justify-between srvc:gap-x-3 srvc:text-xs srvc:text-muted-foreground'>
+                {quota && <p>{leftText(resource, fixed ? shown : value, quota.available, quota.limit)}</p>}
+                {fixed && <p className={max < min ? 'srvc:text-destructive' : undefined}>{max < min ? 'No room left in your plan to change it' : 'Set by your plan'}</p>}
+            </div>
             {outside && (
                 <p className='srvc:text-xs srvc:text-destructive'>
                     Pick between {formatSize(resource, min)} and {formatSize(resource, max)}.

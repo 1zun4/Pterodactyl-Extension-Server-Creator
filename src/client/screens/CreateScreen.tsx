@@ -146,7 +146,7 @@ export default function CreateScreen() {
                                         })}
                                     </div>
                                 </TitledGreyBox>
-                                <TitledGreyBox title='Settings'>
+                                <TitledGreyBox title='Settings' className='srvc:flex srvc:flex-col' contentClassName='srvc:flex srvc:flex-1 srvc:flex-col srvc:gap-6'>
                                     <div className='srvc:grid srvc:gap-4'>
                                         {(game.variables ?? []).length === 0 && <p className='srvc:text-sm srvc:text-muted-foreground'>Nothing to set up. You can change startup settings later.</p>}
                                         {(game.variables ?? []).map((variable) => (
@@ -159,11 +159,11 @@ export default function CreateScreen() {
                                                 {variable.description && <p className='srvc:mt-1 srvc:text-xs srvc:break-words srvc:text-muted-foreground'>{variable.description}</p>}
                                             </div>
                                         ))}
-                                        <div className='srvc:flex srvc:justify-end srvc:pt-2'>
-                                            <Button type='submit' className='srvc:w-full srvc:sm:w-auto' disabled={!valid} isLoading={creation.isPending}>
-                                                Create server
-                                            </Button>
-                                        </div>
+                                    </div>
+                                    <div className='srvc:mt-auto srvc:flex srvc:justify-end'>
+                                        <Button type='submit' className='srvc:w-full srvc:sm:w-auto' disabled={!valid} isLoading={creation.isPending}>
+                                            Create server
+                                        </Button>
                                     </div>
                                 </TitledGreyBox>
                             </form>

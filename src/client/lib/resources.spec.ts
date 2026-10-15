@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { formatCpu, formatMiB, indexOf, labels, leftText, positionOf, recommended, scaleFor, snap, stopCount, ticks, valueAt } from './resources';
+import { editable, formatCpu, formatMiB, indexOf, labels, leftText, parseSize, positionOf, recommended, scaleFor, snap, stopCount, ticks, valueAt } from './resources';
 
 describe('formatting', () => {
     test('memory and disk read as GiB', () => {
@@ -81,7 +81,14 @@ describe('marks', () => {
     test('labels keep both ends and drop crowded ticks', () => {
         expect(labels('memory', scaleFor('memory', 1024, 8192)).map(({ value }) => value)).toEqual([1024, 4096, 6144, 8192]);
         expect(labels('disk', scaleFor('disk', 5120, 1024 * 1024)).map(({ value }) => value)).toEqual([5120, 1024 * 1024]);
-        expect(labels('cpu', scaleFor('cpu', 100, 100))).toEqual([{ value: 100, at: 0 }]);
+        expect(labels('cpu', scaleFor('cpu', 100, 100))).toEqual([{ value: 100, at: 1 }]);
+    });
+
+    test('labels keep the recommended size before other ticks', () => {
+        expect(labels('memory', scaleFor('memory', 1024, 8192), 0.2, 2048).map(({ value }) => value)).toEqual([1024, 4096, 6144, 8192]);
+        expect(labels('memory', scaleFor('memory', 1024, 6144), 0.2, 4096).map(({ value }) => value)).toEqual([1024, 2048, 4096, 6144]);
+        expect(labels('memory', scaleFor('memory', 1024, 4096), 0.2, 2048).map(({ value }) => value)).toEqual([1024, 2048, 4096]);
+        expect(labels('disk', scaleFor('disk', 5120, 10240), 0.2, 10240).map(({ value }) => value)).toEqual([5120, 10240]);
     });
 
     test('recommended is the next common size that still fits', () => {
@@ -90,5 +97,29 @@ describe('marks', () => {
         expect(recommended('memory', scaleFor('memory', 2048, 3072))).toBeNull();
         expect(recommended('cpu', scaleFor('cpu', 100, 200))).toBe(200);
         expect(recommended('disk', scaleFor('disk', 5120, 20480))).toBe(10240);
+    });
+});
+
+describe('exact values', () => {
+    test('read GiB and cores unless a unit is given', () => {
+        expect(parseSize('memory', '2')).toBe(2048);
+        expect(parseSize('memory', '1,5')).toBe(1536);
+        expect(parseSize('memory', '1500 MiB')).toBe(1500);
+        expect(parseSize('disk', '1 TiB')).toBe(1024 * 1024);
+        expect(parseSize('cpu', '1.5')).toBe(150);
+        expect(parseSize('cpu', '2 cores')).toBe(200);
+        expect(parseSize('cpu', '75%')).toBe(75);
+    });
+
+    test('reject anything else', () => {
+        expect(parseSize('memory', '')).toBeNull();
+        expect(parseSize('memory', 'lots')).toBeNull();
+        expect(parseSize('memory', '2 cores')).toBeNull();
+        expect(parseSize('cpu', '2 GiB')).toBeNull();
+    });
+
+    test('show the value in GiB or cores', () => {
+        expect(editable('memory', 1536)).toBe('1.5');
+        expect(editable('cpu', 100)).toBe('1');
     });
 });
