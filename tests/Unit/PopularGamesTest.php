@@ -11,7 +11,7 @@ final class PopularGamesTest extends TestCase
 {
     public function test_installed_eggs_are_found_by_name_and_used_ones_are_left_out(): void
     {
-        $eggs = [['id' => 9, 'name' => 'Garrys Mod'], ['id' => 50, 'name' => 'tmodloader '], ['id' => 30, 'name' => 'Paper'], ['id' => 31, 'name' => 'Paper']];
+        $eggs = [['id' => 9, 'name' => 'Garrys Mod'], ['id' => 50, 'name' => 'tModLoader'], ['id' => 30, 'name' => 'Paper'], ['id' => 31, 'name' => 'Paper']];
         $games = array_column(PopularGames::available($eggs, [9]), null, 'catalog_id');
 
         $this->assertArrayNotHasKey('games-garrys-mod', $games);
