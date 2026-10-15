@@ -26,6 +26,8 @@ use ServerCreator\Steam\Store;
  * @property int $databases
  * @property int $backups
  * @property int $allocations
+ * @property int $ports
+ * @property list<string>|null $port_variables
  * @property int $sort
  * @property bool $enabled
  * @property Egg $egg
@@ -36,11 +38,11 @@ final class Game extends Model
 
     protected $guarded = ['id', 'created_at', 'updated_at'];
 
-    protected $attributes = ['enabled' => true];
+    protected $attributes = ['enabled' => true, 'ports' => 1];
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean', 'steam_app_id' => 'integer'];
+        return ['enabled' => 'boolean', 'steam_app_id' => 'integer', 'ports' => 'integer', 'port_variables' => 'array'];
     }
 
     public function egg(): BelongsTo

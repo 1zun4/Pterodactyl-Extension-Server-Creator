@@ -6,6 +6,8 @@ namespace ServerCreator\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Validation\Rule;
 use Pterodactyl\Models\Location;
 use Pterodactyl\Models\Server;
 use Pterodactyl\Models\User;
@@ -18,6 +20,7 @@ use ServerCreator\Panel\Panel;
 use ServerCreator\Services\Duplicator;
 use ServerCreator\Services\Quotas;
 use ServerCreator\Steam\Store;
+use ServerCreator\Support\PopularGames;
 use ServerCreator\Support\Quota;
 
 final class AdminController
@@ -26,9 +29,16 @@ final class AdminController
 
     public function index(): JsonResponse
     {
+        $games = Game::query()->with('egg:id,name')->orderBy('sort')->orderBy('name')->get();
+        $eggs = $this->panel->eggs();
+
         return new JsonResponse([
-            'games' => Game::query()->with('egg:id,name')->orderBy('sort')->orderBy('name')->get()->map(static fn (Game $game): array => Presenter::game($game)),
-            'eggs' => $this->panel->eggs()->map(static fn ($egg): array => ['id' => $egg->id, 'name' => $egg->name, 'images' => array_values($egg->docker_images)]),
+            'games' => $games->map(static fn (Game $game): array => Presenter::game($game)),
+            'eggs' => $eggs->map(static fn ($egg): array => ['id' => $egg->id, 'name' => $egg->name, 'images' => array_values($egg->docker_images)]),
+            'popular' => array_map(
+                static fn (array $game): array => $game + ['artwork' => $game['steam_app_id'] ? Store::artwork($game['steam_app_id']) : null],
+                PopularGames::available($eggs->map(static fn ($egg): array => ['id' => $egg->id, 'name' => $egg->name]), $games->pluck('egg_id')->map(intval(...))->all()),
+            ),
             'quota' => QuotaLimit::query()->whereNull('user_id')->first()?->limits() ?? array_fill_keys(Quota::RESOURCES, 0),
             'users' => QuotaLimit::query()->with('user:id,username,email')->whereNotNull('user_id')->get()->map(static fn (QuotaLimit $row): array => [
                 'id' => $row->user_id,
@@ -45,7 +55,11 @@ final class AdminController
 
     public function storeGame(Request $request): JsonResponse
     {
-        Game::query()->create($this->validatedGame($request));
+        $data = $this->validatedGame($request, importable: true);
+        $catalog = Arr::pull($data, 'catalog_id');
+        $data['egg_id'] ??= $this->panel->importCatalogEgg($catalog)->id;
+
+        Game::query()->create($data);
 
         return $this->index();
     }
@@ -160,11 +174,15 @@ final class AdminController
             ])]);
     }
 
-    /** @return array<string, mixed> */
-    private function validatedGame(Request $request): array
+    /**
+     * With `importable`, a game from the popular list may leave out the egg, which is then imported from the catalog.
+     *
+     * @return array<string, mixed>
+     */
+    private function validatedGame(Request $request, bool $importable = false): array
     {
         $data = $request->validate([
-            'egg_id' => ['required', 'integer', 'exists:eggs,id'],
+            'egg_id' => $importable ? ['required_without:catalog_id', 'nullable', 'integer', 'exists:eggs,id'] : ['required', 'integer', 'exists:eggs,id'],
             'name' => ['required', 'string', 'max:191'],
             'description' => ['nullable', 'string', 'max:1000'],
             'image' => ['nullable', 'url:https', 'max:500'],
@@ -179,11 +197,15 @@ final class AdminController
             'databases' => ['required', 'integer', 'min:0', 'max:100'],
             'backups' => ['required', 'integer', 'min:0', 'max:100'],
             'allocations' => ['required', 'integer', 'min:0', 'max:100'],
+            'ports' => ['integer', 'min:1', 'max:10'],
+            'port_variables' => ['nullable', 'array', 'max:9'],
+            'port_variables.*' => ['string', 'distinct', 'regex:/^[A-Za-z0-9_]{1,191}$/'],
             'sort' => ['integer', 'min:-1000', 'max:1000'],
             'enabled' => ['boolean'],
+            ...($importable ? ['catalog_id' => ['nullable', 'string', Rule::in(array_keys(PopularGames::GAMES))]] : []),
         ]);
 
-        return $data + ['sort' => 0, 'enabled' => true];
+        return $data + ['sort' => 0, 'enabled' => true, 'ports' => 1, 'port_variables' => []];
     }
 
     /** @return array<string, int> */

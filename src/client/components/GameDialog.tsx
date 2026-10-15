@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Dialog, Input, Label, Select, Switch } from '@pterodactyl/sdk';
-import { keys, searchSteam, type Admin, type Game, type GameInput } from '../api';
+import { keys, searchSteam, type Admin, type Game, type GameInput, type PopularGame } from '../api';
 import { formatSize } from '../lib/resources';
 import Artwork from './Artwork';
 
@@ -19,49 +19,73 @@ const FEATURES = [
 
 interface Props {
     game: Game | null;
+    /** Starts a new game from ready-made settings. */
+    preset?: PopularGame | null;
     eggs: Admin['eggs'];
     pending: boolean;
     onClose: () => void;
     onSave: (input: GameInput) => void;
 }
 
-export default function GameDialog({ game, eggs, pending, onClose, onSave }: Props) {
-    const [input, setInput] = useState<GameInput>(
-        game ?? {
-            egg_id: eggs[0]?.id ?? 0,
-            name: '',
-            description: null,
-            image: null,
-            steam_app_id: null,
-            docker_image: null,
-            enabled: true,
-            sort: 0,
-            memory_min: 1024,
-            memory_max: 4096,
-            disk_min: 5120,
-            disk_max: 20480,
-            cpu_min: 100,
-            cpu_max: 200,
-            databases: 0,
-            backups: 1,
-            allocations: 0,
-        }
-    );
+const CATALOG = 'catalog:';
+
+function blank(eggs: Admin['eggs']): GameInput {
+    return {
+        egg_id: eggs[0]?.id ?? null,
+        name: '',
+        description: null,
+        image: null,
+        steam_app_id: null,
+        docker_image: null,
+        enabled: true,
+        sort: 0,
+        memory_min: 1024,
+        memory_max: 4096,
+        disk_min: 5120,
+        disk_max: 20480,
+        cpu_min: 100,
+        cpu_max: 200,
+        databases: 0,
+        backups: 1,
+        allocations: 0,
+        ports: 1,
+        port_variables: [],
+    };
+}
+
+function fromPreset(preset: PopularGame, eggs: Admin['eggs']): GameInput {
+    return { ...blank(eggs), ...preset, catalog_id: preset.egg_id === null ? preset.catalog_id : null };
+}
+
+export default function GameDialog({ game, preset = null, eggs, pending, onClose, onSave }: Props) {
+    const [input, setInput] = useState<GameInput>(() => game ?? (preset ? fromPreset(preset, eggs) : blank(eggs)));
+    const [portNames, setPortNames] = useState(input.port_variables.join(', '));
     const [term, setTerm] = useState('');
     const steam = useQuery({ queryKey: keys.steam(term), queryFn: () => searchSteam(term), enabled: term.trim().length >= 2 });
     const set = (changes: Partial<GameInput>) => setInput((current) => ({ ...current, ...changes }));
     const egg = eggs.find((item) => item.id === input.egg_id);
     const artwork = input.image || (input.steam_app_id ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${input.steam_app_id}/header.jpg` : null);
-    const valid = input.name.trim() !== '' && input.egg_id > 0 && RANGES.every(({ key }) => input[`${key}_min`] <= input[`${key}_max`]);
+    const valid = input.name.trim() !== '' && ((input.egg_id ?? 0) > 0 || !!input.catalog_id) && RANGES.every(({ key }) => input[`${key}_min`] <= input[`${key}_max`]);
+    const eggOptions = [
+        ...(preset && preset.egg_id === null ? [{ value: `${CATALOG}${preset.catalog_id}`, label: `${preset.catalog_egg} (import from the egg catalog)` }] : []),
+        ...eggs.map((item) => ({ value: item.id, label: item.name })),
+    ];
 
     return (
-        <Dialog open onClose={onClose} title={game ? `Edit ${game.name}` : 'Add a game'} preventExternalClose={pending}>
+        <Dialog open onClose={onClose} title={game ? `Edit ${game.name}` : preset ? `Add ${preset.name}` : 'Add a game'} preventExternalClose={pending}>
             <div className='srvc:grid srvc:gap-4'>
                 <div className='srvc:grid srvc:gap-4 srvc:sm:grid-cols-[minmax(0,1fr)_10rem]'>
                     <div className='srvc:grid srvc:content-start srvc:gap-4'>
                         <div>
                             <Label htmlFor='srvc-egg'>Egg</Label>
-                            <Select id='srvc-egg' value={input.egg_id} onChange={(value) => set({ egg_id: Number(value), docker_image: null })} options={eggs.map((item) => ({ value: item.id, label: item.name }))} />
+                            <Select
+                                id='srvc-egg'
+                                value={input.egg_id ?? `${CATALOG}${input.catalog_id}`}
+                                onChange={(value) =>
+                                    String(value).startsWith(CATALOG) ? set({ egg_id: null, catalog_id: String(value).slice(CATALOG.length), docker_image: null }) : set({ egg_id: Number(value), catalog_id: null, docker_image: null })
+                                }
+                                options={eggOptions}
+                            />
                         </div>
                         <div>
                             <Label htmlFor='srvc-game-name'>Name</Label>
@@ -123,6 +147,28 @@ export default function GameDialog({ game, eggs, pending, onClose, onSave }: Pro
                             <Input id={`srvc-${key}`} type='number' min={0} max={100} value={input[key]} onChange={(event) => set({ [key]: Number(event.currentTarget.value) })} />
                         </div>
                     ))}
+                </div>
+                <div className='srvc:grid srvc:gap-2'>
+                    <div className='srvc:grid srvc:gap-4 srvc:sm:grid-cols-[10rem_minmax(0,1fr)]'>
+                        <div>
+                            <Label htmlFor='srvc-ports'>Ports in a row</Label>
+                            <Input id='srvc-ports' type='number' min={1} max={10} value={input.ports} onChange={(event) => set({ ports: Number(event.currentTarget.value) })} />
+                        </div>
+                        <div>
+                            <Label htmlFor='srvc-port-variables'>Variables for the extra ports</Label>
+                            <Input
+                                id='srvc-port-variables'
+                                placeholder='QUERY_PORT, RCON_PORT'
+                                disabled={input.ports < 2}
+                                value={portNames}
+                                onChange={(event) => {
+                                    setPortNames(event.currentTarget.value);
+                                    set({ port_variables: event.currentTarget.value.split(/[\s,]+/).filter(Boolean) });
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <p className='srvc:text-xs srvc:text-muted-foreground'>For games that need more than one port. The second, third and so on go into these egg variables, in order.</p>
                 </div>
                 <label className='srvc:flex srvc:items-center srvc:justify-between srvc:gap-3 srvc:text-sm'>
                     <span>Users can pick this game</span>

@@ -24,12 +24,14 @@ final class Presenter
             'docker_image' => $game->docker_image,
             'enabled' => $game->enabled,
             'sort' => $game->sort,
-        ] + $game->only(['memory_min', 'memory_max', 'disk_min', 'disk_max', 'cpu_min', 'cpu_max', 'databases', 'backups', 'allocations']);
+            'port_variables' => $game->port_variables ?? [],
+        ] + $game->only(['memory_min', 'memory_max', 'disk_min', 'disk_max', 'cpu_min', 'cpu_max', 'databases', 'backups', 'allocations', 'ports']);
 
         if ($withVariables) {
             $data['variables'] = $game->egg->variables()
                 ->where('user_viewable', true)
                 ->where('user_editable', true)
+                ->whereNotIn('env_variable', $game->port_variables ?? [])
                 ->orderBy('sort_order')->orderBy('id')
                 ->get()
                 ->map(static fn (EggVariable $variable): array => [

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Dialog, PageContentBlock, PanelLink, Select, Spinner, TitledGreyBox, httpErrorToHuman, toast, usePanelNavigate } from '@pterodactyl/sdk';
-import { deleteGame, getAdmin, keys, saveDefaultQuota, saveGame, saveLocations, type Admin, type Game, type GameInput, type Limits } from '../api';
+import { deleteGame, getAdmin, keys, saveDefaultQuota, saveGame, saveLocations, type Admin, type Game, type GameInput, type Limits, type PopularGame } from '../api';
 import Artwork from '../components/Artwork';
 import GameDialog from '../components/GameDialog';
 import QuotaFields from '../components/QuotaFields';
@@ -12,7 +12,7 @@ export default function AdminScreen() {
     const queryClient = useQueryClient();
     const navigate = usePanelNavigate();
     const data = useQuery({ queryKey: keys.admin, queryFn: getAdmin });
-    const [editing, setEditing] = useState<Game | 'new' | null>(null);
+    const [editing, setEditing] = useState<Game | PopularGame | 'new' | null>(null);
     const [removing, setRemoving] = useState<Game | null>(null);
     const [quota, setQuota] = useState<Limits | null>(null);
     const [locations, setLocations] = useState<number[]>([]);
@@ -27,7 +27,7 @@ export default function AdminScreen() {
     const update = (result: Admin) => queryClient.setQueryData(keys.admin, result);
     const onError = (error: unknown) => toast.error(httpErrorToHuman(error));
 
-    const saving = useMutation({ mutationFn: (input: GameInput) => saveGame(input, editing && editing !== 'new' ? editing.id : undefined), onSuccess: (result) => (update(result), setEditing(null)), onError });
+    const saving = useMutation({ mutationFn: (input: GameInput) => saveGame(input, editing && editing !== 'new' && 'id' in editing ? editing.id : undefined), onSuccess: (result) => (update(result), setEditing(null)), onError });
     const removal = useMutation({ mutationFn: (id: number) => deleteGame(id), onSuccess: (result) => (update(result), setRemoving(null)), onError });
     const quotaSaving = useMutation({ mutationFn: () => saveDefaultQuota(quota!), onSuccess: (result) => (update(result), toast.success('Default quota saved.')), onError });
     const locationSaving = useMutation({ mutationFn: () => saveLocations(locations), onSuccess: (result) => (update(result), toast.success('Locations saved.')), onError });
@@ -77,6 +77,29 @@ export default function AdminScreen() {
                         </div>
                     )}
 
+                    {data.data.popular.length > 0 && (
+                        <section>
+                            <h2 className='srvc:font-header srvc:text-sm srvc:font-semibold srvc:uppercase srvc:tracking-wide srvc:text-foreground'>Popular games</h2>
+                            <p className='srvc:mt-1 srvc:mb-3 srvc:text-sm srvc:text-muted-foreground'>Ready-made sizes and artwork. Eggs you do not have yet are imported from the Pterodactyl egg catalog when you save.</p>
+                            <div className='srvc:grid srvc:grid-cols-2 srvc:gap-3 srvc:sm:grid-cols-3 srvc:lg:grid-cols-5'>
+                                {data.data.popular.map((game) => (
+                                    <button
+                                        key={game.catalog_id}
+                                        type='button'
+                                        onClick={() => setEditing(game)}
+                                        className='srvc:flex srvc:min-w-0 srvc:flex-col srvc:gap-2 srvc:rounded-sm srvc:border-2 srvc:border-transparent srvc:bg-card srvc:p-2 srvc:text-left srvc:transition-colors srvc:hover:border-border'
+                                    >
+                                        <Artwork src={game.artwork} name={game.name} />
+                                        <div className='srvc:min-w-0'>
+                                            <p className='srvc:truncate srvc:text-sm srvc:font-medium srvc:text-foreground'>{game.name}</p>
+                                            <p className='srvc:truncate srvc:text-xs srvc:text-muted-foreground'>{game.egg_id === null ? 'Egg from the catalog' : 'Egg installed'}</p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
                     <div className='srvc:grid srvc:items-start srvc:gap-6 srvc:lg:grid-cols-2'>
                         <TitledGreyBox title='Default quota'>
                             <p className='srvc:mb-4 srvc:text-sm srvc:text-muted-foreground'>For everyone without a quota of their own. With 0 servers, users cannot create any.</p>
@@ -121,7 +144,16 @@ export default function AdminScreen() {
                 </div>
             )}
 
-            {editing && data.data && <GameDialog game={editing === 'new' ? null : editing} eggs={data.data.eggs} pending={saving.isPending} onClose={() => setEditing(null)} onSave={(input) => saving.mutate(input)} />}
+            {editing && data.data && (
+                <GameDialog
+                    game={editing !== 'new' && 'id' in editing ? editing : null}
+                    preset={editing !== 'new' && 'catalog_id' in editing ? editing : null}
+                    eggs={data.data.eggs}
+                    pending={saving.isPending}
+                    onClose={() => setEditing(null)}
+                    onSave={(input) => saving.mutate(input)}
+                />
+            )}
             <Dialog.Confirm open={removing !== null} onClose={() => setRemoving(null)} title={`Delete ${removing?.name}?`} confirm='Delete' pending={removal.isPending} onConfirmed={() => removing && removal.mutate(removing.id)}>
                 Users can no longer pick it. Servers that were created from it keep running.
             </Dialog.Confirm>

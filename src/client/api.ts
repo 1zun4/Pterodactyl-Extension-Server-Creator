@@ -32,10 +32,24 @@ export interface Game {
     databases: number;
     backups: number;
     allocations: number;
+    /** Ports in a row each new server gets; the ones after the first go into `port_variables`. */
+    ports: number;
+    port_variables: string[];
     variables?: Variable[];
 }
 
-export type GameInput = Omit<Game, 'id' | 'egg' | 'artwork' | 'variables'>;
+export type GameInput = Omit<Game, 'id' | 'egg' | 'egg_id' | 'artwork' | 'variables'> & {
+    /** Null when the egg is imported from the catalog on save. */
+    egg_id: number | null;
+    catalog_id?: string | null;
+};
+
+/** Ready-made settings for a game, with the installed egg it would use. */
+export type PopularGame = Omit<GameInput, 'image' | 'docker_image' | 'enabled' | 'sort' | 'databases' | 'backups' | 'allocations'> & {
+    catalog_id: string;
+    catalog_egg: string;
+    artwork: string | null;
+};
 
 export interface QuotaSummary {
     limits: Limits;
@@ -72,6 +86,7 @@ export interface OwnedServer {
 export interface Admin {
     games: Game[];
     eggs: { id: number; name: string; images: string[] }[];
+    popular: PopularGame[];
     quota: Limits;
     users: { id: number; username: string; email: string; limits: Limits }[];
     locations: { all: { id: number; short: string; long: string | null }[]; selected: number[] };

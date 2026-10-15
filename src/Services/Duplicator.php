@@ -51,7 +51,7 @@ final readonly class Duplicator
             'database_limit' => $source->database_limit,
             'allocation_limit' => $source->allocation_limit,
             'backup_limit' => $source->backup_limit,
-        ], allocation: $allocation);
+        ], allocations: [$allocation]);
 
         if ($copyFiles) {
             $copy = Copy::query()->create(['source_id' => $source->id, 'target_id' => $server->id, 'user_id' => $admin->id, 'step' => 'backup']);

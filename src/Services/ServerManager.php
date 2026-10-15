@@ -34,8 +34,19 @@ final readonly class ServerManager
             $this->assertQuota($this->quotas->for($user)->exceeded($resources, $this->quotas->used($user)));
 
             $egg = $game->egg;
+            $environment = $this->panel->environment($egg, $input['environment']);
 
             try {
+                $allocations = $game->ports > 1 ? $this->panel->allocationsInARow($egg, $input['memory'], $input['disk'], $this->panel->locations(), $game->ports) : [];
+
+                foreach (array_slice($allocations, 1) as $index => $allocation) {
+                    $variable = $game->port_variables[$index] ?? null;
+
+                    if ($variable !== null && array_key_exists($variable, $environment)) {
+                        $environment[$variable] = (string) $allocation->port;
+                    }
+                }
+
                 $server = $this->panel->create([
                     'name' => $input['name'],
                     'description' => '',
@@ -43,7 +54,7 @@ final readonly class ServerManager
                     'egg_id' => $egg->id,
                     'image' => $game->docker_image ?: (string) (array_values($egg->docker_images)[0] ?? ''),
                     'startup' => $egg->startup,
-                    'environment' => $this->panel->environment($egg, $input['environment']),
+                    'environment' => $environment,
                     'memory' => $input['memory'],
                     'swap' => 0,
                     'disk' => $input['disk'],
@@ -56,7 +67,7 @@ final readonly class ServerManager
                     'database_limit' => $game->databases,
                     'allocation_limit' => $game->allocations,
                     'backup_limit' => $game->backups,
-                ], $this->panel->locations());
+                ], $this->panel->locations(), $allocations);
             } catch (NoViableNodeException|NoViableAllocationException) {
                 throw new CreatorException('No node has room for this server right now. Try smaller resources or ask an administrator.');
             }

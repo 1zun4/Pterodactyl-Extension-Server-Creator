@@ -13,11 +13,13 @@ Let users create their own servers within a quota, and duplicate servers in one 
 
 1. Download `server-creator-<version>.pteroext` from the [latest release](https://github.com/CCBlueX/Pterodactyl-Extension-Server-Creator/releases/latest).
 2. Install and enable it under **Admin → Extensions**.
-3. Under **Admin → Server Creator**, add a game and give users a quota.
+3. Under **Admin → Server Creator**, add a game (or pick one under **Popular games**) and give users a quota.
 
 ## Features
 
-- **Game picker**: users pick a game, then size it with sliders in GiB and cores. Shows what's left and a recommended size.
+- **Game picker**: users pick a game, then size it with sliders in GiB and cores, or click the size to type it. Shows what's left and marks a recommended size.
+- **Popular games**: Counter-Strike 2, Valheim, Terraria, Palworld, Project Zomboid and more come with sizes and artwork. Missing eggs are imported from the Pterodactyl egg catalog.
+- **Games with several ports**: a game can give each server ports in a row and write the extra ones into egg variables.
 - **Quotas**: limit servers, memory, disk, CPU, databases, backups and ports, for everyone or per user.
 - **Resize and delete**: owners resize with the same sliders on the Settings page. Deleting is opt-in.
 - **Safe placement**: new servers only go to nodes with room, in the locations you choose.

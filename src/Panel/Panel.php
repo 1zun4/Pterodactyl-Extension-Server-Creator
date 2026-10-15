@@ -8,10 +8,12 @@ use Illuminate\Support\Collection;
 use Pterodactyl\Contracts\Backups\DeletesBackups;
 use Pterodactyl\Contracts\Backups\InitiatesBackups;
 use Pterodactyl\Contracts\Backups\RestoresBackups;
+use Pterodactyl\Contracts\Eggs\ImportsCatalogEggs;
 use Pterodactyl\Contracts\Servers\CreatesServers;
 use Pterodactyl\Contracts\Servers\DeletesServers;
 use Pterodactyl\Contracts\Servers\UpdatesServerBuild;
 use Pterodactyl\Exceptions\Service\Deployment\NoViableAllocationException;
+use Pterodactyl\Exceptions\Service\Deployment\NoViableNodeException;
 use Pterodactyl\Facades\Activity;
 use Pterodactyl\Facades\Extensions;
 use Pterodactyl\Models\Allocation;
@@ -22,6 +24,7 @@ use Pterodactyl\Models\Objects\DeploymentObject;
 use Pterodactyl\Models\Server;
 use Pterodactyl\Models\User;
 use Pterodactyl\Services\Servers\VariableValidatorService;
+use ServerCreator\Support\Ports;
 
 /**
  * The only place this extension touches Panel internals.
@@ -35,6 +38,7 @@ final readonly class Panel
         private InitiatesBackups $backups,
         private RestoresBackups $restorer,
         private DeletesBackups $backupDeleter,
+        private ImportsCatalogEggs $catalog,
     ) {}
 
     /**
@@ -57,15 +61,19 @@ final readonly class Panel
     }
 
     /**
-     * Creates a server on a node of the given locations, or on the given allocation.
+     * Creates a server on a node of the given locations, or on the given allocations (the first one is the primary).
      *
      * @param  array<string, mixed>  $data
      * @param  list<int>  $locations  Empty for every location.
+     * @param  list<Allocation>  $allocations
      */
-    public function create(array $data, array $locations = [], ?Allocation $allocation = null): Server
+    public function create(array $data, array $locations = [], array $allocations = []): Server
     {
-        if ($allocation !== null) {
-            return $this->creator->create($data + ['allocation_id' => $allocation->id]);
+        if ($allocations !== []) {
+            return $this->creator->create($data + [
+                'allocation_id' => $allocations[0]->id,
+                'allocation_additional' => array_map(static fn (Allocation $allocation): int => $allocation->id, array_slice($allocations, 1)),
+            ]);
         }
 
         return $this->creator->create($data, (new DeploymentObject())->setDedicated(false)->setLocations($locations)->setPorts([]));
@@ -75,6 +83,33 @@ final readonly class Panel
     {
         return Allocation::query()->unassigned()->onNodes([$node->id])->inRandomOrder()->first()
             ?? throw new NoViableAllocationException(trans('exceptions.deployment.no_viable_allocations'));
+    }
+
+    /**
+     * `count` free allocations with consecutive ports on a node that the panel's own deployment would pick.
+     *
+     * @param  list<int>  $locations
+     * @return list<Allocation>
+     */
+    public function allocationsInARow(Egg $egg, int $memory, int $disk, array $locations, int $count): array
+    {
+        $nodes = Node::query()->viableFor($memory, $disk)->inLocations($locations)->forEggTags($egg->tagSlugs())->forDeployTags([])->get()->pluck('id')->all();
+        throw_if($nodes === [], NoViableNodeException::class, trans('exceptions.deployment.no_viable_nodes'));
+
+        $free = Allocation::query()->unassigned()->onNodes($nodes)->toBase()->get(['id', 'node_id', 'ip', 'port'])
+            ->map(static fn (object $row): array => ['id' => (int) $row->id, 'node' => (int) $row->node_id, 'ip' => (string) $row->ip, 'port' => (int) $row->port]);
+        $runs = Ports::runs($free, $count);
+        throw_if($runs === [], NoViableAllocationException::class, trans('exceptions.deployment.no_viable_allocations'));
+
+        $ids = $runs[array_rand($runs)];
+        $allocations = Allocation::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+        return array_map(static fn (int $id): Allocation => $allocations[$id], $ids);
+    }
+
+    public function importCatalogEgg(string $id): Egg
+    {
+        return $this->catalog->import($id);
     }
 
     /** Only memory, disk and CPU change. The feature limits are always written, so they are passed along unchanged. */
