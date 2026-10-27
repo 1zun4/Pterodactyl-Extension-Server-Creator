@@ -20,6 +20,7 @@ Let users create their own servers within a quota, and duplicate servers in one 
 - **Game picker**: users pick a game, then size it with sliders in GiB and cores, or click the size to type it. Shows what's left and marks a recommended size.
 - **Popular games**: Counter-Strike 2, Valheim, Terraria, Palworld, Project Zomboid and more come with sizes and artwork. Missing eggs are imported from the Pterodactyl egg catalog.
 - **Games with several ports**: a game can give each server ports in a row and write the extra ones into egg variables.
+- **Port ranges**: limit a game to ports such as `25565-25600`, so each game gets its own ports on a shared node.
 - **Quotas**: limit servers, memory, disk, CPU, databases, backups and ports, for everyone or per user.
 - **Resize and delete**: owners resize with the same sliders on the Settings page. Deleting is opt-in.
 - **Safe placement**: new servers only go to nodes with room, in the locations you choose.

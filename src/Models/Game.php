@@ -28,6 +28,7 @@ use ServerCreator\Steam\Store;
  * @property int $allocations
  * @property int $ports
  * @property list<string>|null $port_variables
+ * @property string|null $port_range
  * @property int $sort
  * @property bool $enabled
  * @property Egg $egg

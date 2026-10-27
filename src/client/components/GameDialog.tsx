@@ -50,6 +50,7 @@ function blank(eggs: Admin['eggs']): GameInput {
         allocations: 0,
         ports: 1,
         port_variables: [],
+        port_range: null,
     };
 }
 
@@ -169,6 +170,13 @@ export default function GameDialog({ game, preset = null, eggs, pending, onClose
                         </div>
                     </div>
                     <p className='srvc:text-xs srvc:text-muted-foreground'>For games that need more than one port. The second, third and so on go into these egg variables, in order.</p>
+                </div>
+                <div className='srvc:grid srvc:gap-2'>
+                    <div>
+                        <Label htmlFor='srvc-port-range'>Port range</Label>
+                        <Input id='srvc-port-range' placeholder='25565-25600' maxLength={191} value={input.port_range ?? ''} onChange={(event) => set({ port_range: event.currentTarget.value || null })} />
+                    </div>
+                    <p className='srvc:text-xs srvc:text-muted-foreground'>New servers only get ports from these ports and ranges, separated by commas. Empty for any free port.</p>
                 </div>
                 <label className='srvc:flex srvc:items-center srvc:justify-between srvc:gap-3 srvc:text-sm'>
                     <span>Users can pick this game</span>

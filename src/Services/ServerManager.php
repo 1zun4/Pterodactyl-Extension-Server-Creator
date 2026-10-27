@@ -13,6 +13,7 @@ use ServerCreator\Exceptions\CreatorException;
 use ServerCreator\Models\Game;
 use ServerCreator\Models\OwnedServer;
 use ServerCreator\Panel\Panel;
+use ServerCreator\Support\Ports;
 use ServerCreator\Support\Quota;
 
 /**
@@ -37,7 +38,8 @@ final readonly class ServerManager
             $environment = $this->panel->environment($egg, $input['environment']);
 
             try {
-                $allocations = $game->ports > 1 ? $this->panel->allocationsInARow($egg, $input['memory'], $input['disk'], $this->panel->locations(), $game->ports) : [];
+                $ranges = Ports::ranges((string) $game->port_range) ?? [];
+                $allocations = $game->ports > 1 || $ranges !== [] ? $this->panel->allocationsInARow($egg, $input['memory'], $input['disk'], $this->panel->locations(), $game->ports, $ranges) : [];
 
                 foreach (array_slice($allocations, 1) as $index => $allocation) {
                     $variable = $game->port_variables[$index] ?? null;

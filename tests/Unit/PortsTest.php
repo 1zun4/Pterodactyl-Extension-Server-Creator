@@ -32,4 +32,18 @@ final class PortsTest extends TestCase
         $this->assertSame([[7777, 7778], [7779, 7780]], Ports::runs($free, 2));
         $this->assertCount(5, Ports::runs($free, 1));
     }
+
+    public function test_ranges_parse_ports_and_ranges(): void
+    {
+        $this->assertSame([[25565, 25600], [27015, 27015]], Ports::ranges(' 25565 - 25600 ,27015, '));
+        $this->assertSame([], Ports::ranges(''));
+        $this->assertSame('25565-25600, 27015', Ports::format([[25565, 25600], [27015, 27015]]));
+    }
+
+    public function test_ranges_reject_anything_but_ports(): void
+    {
+        foreach (['25600-25565', '0', '65536', '25565-70000', 'minecraft', '25565:25600', '-25565'] as $value) {
+            $this->assertNull(Ports::ranges($value), $value);
+        }
+    }
 }

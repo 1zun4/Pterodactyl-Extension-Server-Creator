@@ -27,6 +27,7 @@ const game = (id: number, name: string, memory_min: number, cpu_max = 200): api.
     allocations: 0,
     ports: 1,
     port_variables: [],
+    port_range: null,
     variables: [{ key: 'VERSION', name: 'Version', description: null, default: 'latest', required: true }],
 });
 

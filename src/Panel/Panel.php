@@ -87,16 +87,18 @@ final readonly class Panel
 
     /**
      * `count` free allocations with consecutive ports on a node that the panel's own deployment would pick.
+     * With ranges, every port of the run lies within them.
      *
      * @param  list<int>  $locations
+     * @param  list<array{int, int}>  $ranges
      * @return list<Allocation>
      */
-    public function allocationsInARow(Egg $egg, int $memory, int $disk, array $locations, int $count): array
+    public function allocationsInARow(Egg $egg, int $memory, int $disk, array $locations, int $count, array $ranges = []): array
     {
         $nodes = Node::query()->viableFor($memory, $disk)->inLocations($locations)->forEggTags($egg->tagSlugs())->forDeployTags([])->get()->pluck('id')->all();
         throw_if($nodes === [], NoViableNodeException::class, trans('exceptions.deployment.no_viable_nodes'));
 
-        $free = Allocation::query()->unassigned()->onNodes($nodes)->toBase()->get(['id', 'node_id', 'ip', 'port'])
+        $free = Allocation::query()->unassigned()->onNodes($nodes)->onPorts([], $ranges)->toBase()->get(['id', 'node_id', 'ip', 'port'])
             ->map(static fn (object $row): array => ['id' => (int) $row->id, 'node' => (int) $row->node_id, 'ip' => (string) $row->ip, 'port' => (int) $row->port]);
         $runs = Ports::runs($free, $count);
         throw_if($runs === [], NoViableAllocationException::class, trans('exceptions.deployment.no_viable_allocations'));

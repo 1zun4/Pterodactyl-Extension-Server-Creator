@@ -35,6 +35,8 @@ export interface Game {
     /** Ports in a row each new server gets; the ones after the first go into `port_variables`. */
     ports: number;
     port_variables: string[];
+    /** Ports and ranges new servers get their ports from, such as `25565-25600`; null for any port. */
+    port_range: string | null;
     variables?: Variable[];
 }
 
@@ -45,7 +47,7 @@ export type GameInput = Omit<Game, 'id' | 'egg' | 'egg_id' | 'artwork' | 'variab
 };
 
 /** Ready-made settings for a game, with the installed egg it would use. */
-export type PopularGame = Omit<GameInput, 'image' | 'docker_image' | 'enabled' | 'sort' | 'databases' | 'backups' | 'allocations'> & {
+export type PopularGame = Omit<GameInput, 'image' | 'docker_image' | 'enabled' | 'sort' | 'databases' | 'backups' | 'allocations' | 'port_range'> & {
     catalog_id: string;
     catalog_egg: string;
     artwork: string | null;
