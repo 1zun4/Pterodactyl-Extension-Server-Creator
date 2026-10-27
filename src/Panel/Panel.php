@@ -9,12 +9,18 @@ use Pterodactyl\Contracts\Backups\DeletesBackups;
 use Pterodactyl\Contracts\Backups\InitiatesBackups;
 use Pterodactyl\Contracts\Backups\RestoresBackups;
 use Pterodactyl\Contracts\Eggs\ImportsCatalogEggs;
+use Pterodactyl\Contracts\Servers\ChangesServerEgg;
 use Pterodactyl\Contracts\Servers\CreatesServers;
 use Pterodactyl\Contracts\Servers\DeletesServers;
+use Pterodactyl\Contracts\Servers\ReinstallsServers;
 use Pterodactyl\Contracts\Servers\UpdatesServerBuild;
+use Pterodactyl\Contracts\Servers\UpdatesServerDockerImage;
+use Pterodactyl\Contracts\Servers\UpdatesServerVariable;
+use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 use Pterodactyl\Exceptions\Service\Deployment\NoViableAllocationException;
 use Pterodactyl\Exceptions\Service\Deployment\NoViableNodeException;
 use Pterodactyl\Facades\Activity;
+use Pterodactyl\Facades\Daemon;
 use Pterodactyl\Facades\Extensions;
 use Pterodactyl\Models\Allocation;
 use Pterodactyl\Models\Backup;
@@ -22,6 +28,7 @@ use Pterodactyl\Models\Egg;
 use Pterodactyl\Models\Node;
 use Pterodactyl\Models\Objects\DeploymentObject;
 use Pterodactyl\Models\Server;
+use Pterodactyl\Models\ServerVariable;
 use Pterodactyl\Models\User;
 use Pterodactyl\Services\Servers\VariableValidatorService;
 use ServerCreator\Support\Ports;
@@ -39,6 +46,10 @@ final readonly class Panel
         private RestoresBackups $restorer,
         private DeletesBackups $backupDeleter,
         private ImportsCatalogEggs $catalog,
+        private ChangesServerEgg $eggs,
+        private UpdatesServerDockerImage $images,
+        private UpdatesServerVariable $variables,
+        private ReinstallsServers $reinstaller,
     ) {}
 
     /**
@@ -114,17 +125,114 @@ final readonly class Panel
         return $this->catalog->import($id);
     }
 
-    /** Only memory, disk and CPU change. The feature limits are always written, so they are passed along unchanged. */
-    public function resize(Server $server, int $memory, int $disk, int $cpu): Server
+    /**
+     * Memory, disk and CPU change, and the feature limits when given. The feature limits are always written,
+     * so the current ones are passed along otherwise.
+     *
+     * @param  array{databases: int, allocations: int, backups: int}|null  $limits
+     */
+    public function resize(Server $server, int $memory, int $disk, int $cpu, ?array $limits = null): Server
     {
         return $this->builder->update($server, [
             'memory' => $memory,
             'disk' => $disk,
             'cpu' => $cpu,
+            'database_limit' => $limits['databases'] ?? $server->database_limit,
+            'allocation_limit' => $limits['allocations'] ?? $server->allocation_limit,
+            'backup_limit' => $limits['backups'] ?? $server->backup_limit,
+        ]);
+    }
+
+    /** An unreachable node counts as running. */
+    public function isStopped(Server $server): bool
+    {
+        try {
+            return in_array(Daemon::server($server)->details()['state'] ?? 'offline', ['offline', 'stopped'], true);
+        } catch (DaemonConnectionException) {
+            return false;
+        }
+    }
+
+    public function changeEgg(Server $server, Egg $egg, bool $keepVariables): Server
+    {
+        return $this->eggs->change($server, $egg, $keepVariables);
+    }
+
+    public function setImage(Server $server, string $image): Server
+    {
+        return $this->images->update($server, $image);
+    }
+
+    public function reinstall(Server $server): void
+    {
+        $this->reinstaller->reinstall($server);
+    }
+
+    /** @return list<array{id: int, ip: string, port: int}> */
+    public function allocationsOf(Server $server): array
+    {
+        return Allocation::query()->where('server_id', $server->id)->toBase()->get(['id', 'ip', 'port'])
+            ->map(static fn (object $row): array => ['id' => (int) $row->id, 'ip' => (string) $row->ip, 'port' => (int) $row->port])
+            ->all();
+    }
+
+    /**
+     * `count` free allocations with consecutive ports within the ranges, on the server's own node.
+     *
+     * @param  list<array{int, int}>  $ranges
+     * @return list<Allocation>
+     */
+    public function freeRunOnNode(Server $server, int $count, array $ranges): array
+    {
+        $free = Allocation::query()->unassigned()->onNodes([$server->node_id])->onPorts([], $ranges)->toBase()->get(['id', 'node_id', 'ip', 'port'])
+            ->map(static fn (object $row): array => ['id' => (int) $row->id, 'node' => (int) $row->node_id, 'ip' => (string) $row->ip, 'port' => (int) $row->port]);
+        $runs = Ports::runs($free, max(1, $count));
+        throw_if($runs === [], NoViableAllocationException::class, trans('exceptions.deployment.no_viable_allocations'));
+
+        $ids = $runs[array_rand($runs)];
+        $allocations = Allocation::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+        return array_map(static fn (int $id): Allocation => $allocations[$id], $ids);
+    }
+
+    /**
+     * Gives the server exactly these allocations, the first one as its primary, and frees every other one it had.
+     *
+     * @param  list<Allocation>  $allocations
+     */
+    public function replaceAllocations(Server $server, array $allocations): Server
+    {
+        $ids = array_map(static fn (Allocation $allocation): int => $allocation->id, $allocations);
+        $server = $this->builder->update($server, [
+            'allocation_id' => $ids[0],
+            'add_allocations' => $ids,
+            'remove_allocations' => array_values(array_diff(array_column($this->allocationsOf($server), 'id'), $ids)),
             'database_limit' => $server->database_limit,
             'allocation_limit' => $server->allocation_limit,
             'backup_limit' => $server->backup_limit,
         ]);
+
+        Activity::event('server:allocation.primary')->subject($server, $allocations[0])->property(['allocation' => $allocations[0]->toString(), 'via' => 'server-creator'])->log();
+
+        return $server;
+    }
+
+    /** @return array<string, string> Each variable of the server's egg with the value the server uses. */
+    public function variableValues(Server $server): array
+    {
+        $stored = ServerVariable::query()->where('server_id', $server->id)->pluck('variable_value', 'variable_id');
+
+        return $server->egg->variables()->get()
+            ->mapWithKeys(static fn ($variable): array => [$variable->env_variable => (string) ($stored[$variable->id] ?? $variable->default_value ?? '')])
+            ->all();
+    }
+
+    /** @param array<string, string> $values */
+    public function setVariables(Server $server, array $values): void
+    {
+        foreach ($server->egg->variables()->whereIn('env_variable', array_keys($values))->get() as $variable) {
+            $this->variables->update($server, $variable->id, $values[$variable->env_variable]);
+        }
     }
 
     public function delete(Server $server): void

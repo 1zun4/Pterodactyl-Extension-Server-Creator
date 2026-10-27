@@ -77,12 +77,28 @@ export interface CreateInput {
 export interface OwnedServer {
     owned: boolean;
     allow_resize?: boolean;
+    allow_switch?: boolean;
     allow_delete?: boolean;
     game?: string | null;
+    game_id?: number | null;
+    artwork?: string | null;
     current?: { memory: number; disk: number; cpu: number };
     limits?: Record<'memory' | 'disk' | 'cpu', { min: number; max: number }>;
     /** The plan's total, and what is left of it for this server. */
     quota?: Record<'memory' | 'disk' | 'cpu', { limit: number; available: number }>;
+    /** What is left of the quota when this server is not counted. */
+    remaining?: Limits;
+    /** Games the server can switch to. */
+    games?: Game[];
+}
+
+export interface SwitchInput {
+    game: number;
+    memory: number;
+    disk: number;
+    cpu: number;
+    keep_variables: boolean;
+    reinstall: boolean;
 }
 
 export interface Admin {
@@ -128,6 +144,7 @@ export const createServer = async (input: CreateInput) => (await http.post<{ ide
 
 export const getOwnedServer = async (id: string) => (await http.get<OwnedServer>(server(id))).data;
 export const resizeServer = async (id: string, resources: { memory: number; disk: number; cpu: number }) => (await http.put<OwnedServer>(server(id), resources)).data;
+export const switchGame = async (id: string, input: SwitchInput) => (await http.put<OwnedServer>(`${server(id)}/game`, input)).data;
 export const deleteServer = async (id: string, name: string) => http.delete(server(id), { data: { name } });
 
 export const getAdmin = async () => (await http.get<Admin>(admin)).data;

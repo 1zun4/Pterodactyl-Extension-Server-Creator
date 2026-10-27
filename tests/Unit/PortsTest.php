@@ -46,4 +46,32 @@ final class PortsTest extends TestCase
             $this->assertNull(Ports::ranges($value), $value);
         }
     }
+
+    public function test_run_from_needs_the_ports_in_a_row_on_the_primary_ip_within_the_ranges(): void
+    {
+        $held = [
+            ['id' => 1, 'ip' => '10.0.0.1', 'port' => 2456],
+            ['id' => 2, 'ip' => '10.0.0.1', 'port' => 2457],
+            ['id' => 3, 'ip' => '10.0.0.2', 'port' => 2458],
+        ];
+
+        $this->assertSame([2456, 2457], Ports::runFrom($held, 1, 2, []));
+        $this->assertSame([2456, 2457], Ports::runFrom($held, 1, 2, [[2400, 2499]]));
+        $this->assertSame([2457], Ports::runFrom($held, 2, 1, [[2457, 2457]]));
+        $this->assertNull(Ports::runFrom($held, 1, 3, []), 'the third port is on another IP');
+        $this->assertNull(Ports::runFrom($held, 2, 2, []), 'runs start at the primary port');
+        $this->assertNull(Ports::runFrom($held, 1, 2, [[2456, 2456]]), 'the second port is out of range');
+        $this->assertNull(Ports::runFrom($held, 1, 1, [[25565, 25600]]));
+        $this->assertNull(Ports::runFrom($held, 9, 1, []), 'the primary is not held');
+    }
+
+    public function test_fill_writes_extra_ports_into_existing_variables_only(): void
+    {
+        $environment = ['SERVER_PORT' => '1', 'QUERY_PORT' => '27015', 'VERSION' => 'latest'];
+
+        $this->assertSame(
+            ['SERVER_PORT' => '1', 'QUERY_PORT' => '2457', 'VERSION' => 'latest'],
+            Ports::fill($environment, [2456, 2457, 2458], ['QUERY_PORT', 'RCON_PORT']),
+        );
+    }
 }

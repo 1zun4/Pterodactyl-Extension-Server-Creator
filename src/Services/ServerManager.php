@@ -7,6 +7,7 @@ namespace ServerCreator\Services;
 use Illuminate\Support\Facades\Cache;
 use Pterodactyl\Exceptions\Service\Deployment\NoViableAllocationException;
 use Pterodactyl\Exceptions\Service\Deployment\NoViableNodeException;
+use Pterodactyl\Models\Allocation;
 use Pterodactyl\Models\Server;
 use Pterodactyl\Models\User;
 use ServerCreator\Exceptions\CreatorException;
@@ -17,7 +18,7 @@ use ServerCreator\Support\Ports;
 use ServerCreator\Support\Quota;
 
 /**
- * Creating, resizing and deleting the servers users made themselves.
+ * Creating, resizing, switching and deleting the servers users made themselves.
  */
 final readonly class ServerManager
 {
@@ -41,13 +42,7 @@ final readonly class ServerManager
                 $ranges = Ports::ranges((string) $game->port_range) ?? [];
                 $allocations = $game->ports > 1 || $ranges !== [] ? $this->panel->allocationsInARow($egg, $input['memory'], $input['disk'], $this->panel->locations(), $game->ports, $ranges) : [];
 
-                foreach (array_slice($allocations, 1) as $index => $allocation) {
-                    $variable = $game->port_variables[$index] ?? null;
-
-                    if ($variable !== null && array_key_exists($variable, $environment)) {
-                        $environment[$variable] = (string) $allocation->port;
-                    }
-                }
+                $environment = Ports::fill($environment, array_map(static fn (Allocation $allocation): int => $allocation->port, $allocations), $game->port_variables ?? []);
 
                 $server = $this->panel->create([
                     'name' => $input['name'],
@@ -93,6 +88,86 @@ final readonly class ServerManager
         }
 
         return $this->panel->resize($server, $memory, $disk, $cpu);
+    }
+
+    /**
+     * Moves the server to another game: its egg, image, feature limits, sizes and ports. Sizes, quota, node room
+     * and free ports are checked before anything changes.
+     *
+     * @param  array{memory: int, disk: int, cpu: int, keep_variables: bool, reinstall: bool}  $input
+     */
+    public function switchGame(User $user, Server $server, Game $game, array $input): Server
+    {
+        $owned = $this->owned($user, $server);
+        throw_if($owned->game_id === $game->id, new CreatorException('The server already runs this game.'));
+        $this->assertWithin($game, $input);
+
+        return Cache::lock("ext:server-creator:user:{$user->id}", 60)->block(15, function () use ($user, $server, $game, $input, $owned): Server {
+            $limits = ['databases' => $game->databases, 'allocations' => $game->allocations, 'backups' => $game->backups];
+            $this->assertQuota($this->quotas->for($user)->exceeded(['memory' => $input['memory'], 'disk' => $input['disk'], 'cpu' => $input['cpu']] + $limits, $this->quotas->used($user, $server), false));
+
+            if (! $server->node->isViable(max(0, $input['memory'] - $server->memory), max(0, $input['disk'] - $server->disk))) {
+                throw new CreatorException('The node this server runs on has no room for that much.');
+            }
+
+            throw_unless($this->panel->isStopped($server), new CreatorException('Stop the server before switching the game.', 409));
+
+            $ranges = Ports::ranges((string) $game->port_range) ?? [];
+
+            if (Ports::runFrom($this->panel->allocationsOf($server), $server->allocation_id, $game->ports, $ranges) === null) {
+                try {
+                    $this->panel->freeRunOnNode($server, $game->ports, $ranges);
+                } catch (NoViableAllocationException) {
+                    throw new CreatorException('The node this server runs on has no free ports for this game. Ask an administrator.');
+                }
+            }
+
+            $previous = $owned->game?->name;
+            // Bound first, so the egg change keeps this game instead of picking one by egg.
+            $owned->update(['game_id' => $game->id]);
+
+            if ($server->egg_id !== $game->egg_id) {
+                $server = $this->panel->changeEgg($server, $game->egg, $input['keep_variables']);
+            }
+
+            $image = $game->docker_image ?: (string) (array_values($game->egg->docker_images)[0] ?? '');
+
+            if ($image !== '' && $server->image !== $image) {
+                $server = $this->panel->setImage($server, $image);
+            }
+
+            $server = $this->fitPorts($this->panel->resize($server, $input['memory'], $input['disk'], $input['cpu'], $limits), $game);
+            $this->panel->log('server:startup.edit', $server, ['variable' => 'Game', 'old' => $previous, 'new' => $game->name]);
+
+            if ($input['reinstall']) {
+                $this->panel->reinstall($server);
+            }
+
+            return $server;
+        });
+    }
+
+    /**
+     * Gives the server the ports its game needs: when its own do not fit the game's range and ports in a row,
+     * free ones on its node replace all of them. The extra ports go into the game's port variables.
+     *
+     * @throws NoViableAllocationException
+     */
+    public function fitPorts(Server $server, Game $game): Server
+    {
+        $ranges = Ports::ranges((string) $game->port_range) ?? [];
+        $ports = Ports::runFrom($this->panel->allocationsOf($server), $server->allocation_id, $game->ports, $ranges);
+
+        if ($ports === null) {
+            $run = $this->panel->freeRunOnNode($server, $game->ports, $ranges);
+            $server = $this->panel->replaceAllocations($server, $run);
+            $ports = array_map(static fn (Allocation $allocation): int => $allocation->port, $run);
+        }
+
+        $environment = $this->panel->variableValues($server);
+        $this->panel->setVariables($server, array_diff_assoc(Ports::fill($environment, $ports, $game->port_variables ?? []), $environment));
+
+        return $server;
     }
 
     public function delete(User $user, Server $server): void

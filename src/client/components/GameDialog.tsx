@@ -176,7 +176,7 @@ export default function GameDialog({ game, preset = null, eggs, pending, onClose
                         <Label htmlFor='srvc-port-range'>Port range</Label>
                         <Input id='srvc-port-range' placeholder='25565-25600' maxLength={191} value={input.port_range ?? ''} onChange={(event) => set({ port_range: event.currentTarget.value || null })} />
                     </div>
-                    <p className='srvc:text-xs srvc:text-muted-foreground'>New servers only get ports from these ports and ranges, separated by commas. Empty for any free port.</p>
+                    <p className='srvc:text-xs srvc:text-muted-foreground'>Servers of this game only get ports from these ports and ranges, separated by commas, also after a switch or egg change. Empty for any free port.</p>
                 </div>
                 <label className='srvc:flex srvc:items-center srvc:justify-between srvc:gap-3 srvc:text-sm'>
                     <span>Users can pick this game</span>

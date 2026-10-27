@@ -22,9 +22,11 @@ Let users create their own servers within a quota, and duplicate servers in one 
 - **Games with several ports**: a game can give each server ports in a row and write the extra ones into egg variables.
 - **Port ranges**: limit a game to ports such as `25565-25600`, so each game gets its own ports on a shared node.
 - **Quotas**: limit servers, memory, disk, CPU, databases, backups and ports, for everyone or per user.
-- **Resize and delete**: owners resize with the same sliders on the Settings page. Deleting is opt-in.
+- **Resources page**: owners resize, switch to another game and delete (opt-in) on their server's Resources page. A switch brings the new game's egg, limits and ports, and egg changes from other extensions keep the game and ports in step.
 - **Safe placement**: new servers only go to nodes with room, in the locations you choose.
 - **Duplicate**: copy any server from its admin page, optionally with all its files.
+
+![Resources page](docs/screenshots/resources.png)
 
 ![Admin games and quotas](docs/screenshots/admin.png)
 

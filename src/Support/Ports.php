@@ -44,6 +44,63 @@ final class Ports
     }
 
     /**
+     * Writes the ports after the primary one into the given egg variables, in order.
+     * Variables the egg does not have are skipped.
+     *
+     * @param  array<string, string>  $environment
+     * @param  list<int>  $ports  Every port of the server, the primary one first.
+     * @param  list<string>  $variables
+     * @return array<string, string>
+     */
+    public static function fill(array $environment, array $ports, array $variables): array
+    {
+        foreach (array_slice($ports, 1) as $index => $port) {
+            $variable = $variables[$index] ?? null;
+
+            if ($variable !== null && array_key_exists($variable, $environment)) {
+                $environment[$variable] = (string) $port;
+            }
+        }
+
+        return $environment;
+    }
+
+    /**
+     * The ports from the primary allocation on, when the server already holds `count` of them in a row on its IP
+     * and every one lies within the ranges. No ranges allow any port.
+     *
+     * @param  iterable<array{id: int, ip: string, port: int}>  $allocations  The server's allocations.
+     * @param  list<array{int, int}>  $ranges
+     * @return list<int>|null
+     */
+    public static function runFrom(iterable $allocations, int $primary, int $count, array $ranges): ?array
+    {
+        $held = [];
+        $start = null;
+
+        foreach ($allocations as $allocation) {
+            $held[$allocation['ip'].'|'.$allocation['port']] = true;
+            $start = $allocation['id'] === $primary ? $allocation : $start;
+        }
+
+        if ($start === null) {
+            return null;
+        }
+
+        $ports = range($start['port'], $start['port'] + max(1, $count) - 1);
+
+        foreach ($ports as $port) {
+            $inRange = $ranges === [] || array_filter($ranges, static fn (array $range): bool => $port >= $range[0] && $port <= $range[1]) !== [];
+
+            if (! $inRange || ! isset($held[$start['ip'].'|'.$port])) {
+                return null;
+            }
+        }
+
+        return $ports;
+    }
+
+    /**
      * Parses comma separated ports and ranges such as `25565-25600, 27015`.
      *
      * @return list<array{int, int}>|null Each entry as [first, last]; null when an entry is not a port or range.

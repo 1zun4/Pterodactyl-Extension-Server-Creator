@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace ServerCreator;
 
 use Pterodactyl\Contracts\Backups\RestoresBackupStatuses;
+use Pterodactyl\Contracts\Servers\ChangesServerEgg;
 use Pterodactyl\Extensions\ExtensionProvider;
 use Pterodactyl\Services\Extensions\ExtensionSettingDefinition;
 use Pterodactyl\Services\Extensions\ExtensionSettingsDefinition;
+use ServerCreator\Jobs\EggListener;
 use ServerCreator\Jobs\RestoreListener;
 
 class ServerCreatorProvider extends ExtensionProvider
@@ -22,6 +24,10 @@ class ServerCreatorProvider extends ExtensionProvider
                 ->label('Users can resize their servers')
                 ->help('Within their quota and the limits of the game.')
                 ->field('toggle'),
+            ExtensionSettingDefinition::make('allow_switch', 'allow_switch', true, ['boolean'])
+                ->label('Users can switch the game of their servers')
+                ->help('To any enabled game, within their quota. The server gets the egg, limits and ports of the new game.')
+                ->field('toggle'),
             ExtensionSettingDefinition::make('allow_delete', 'allow_delete', false, ['boolean'])
                 ->label('Users can delete their servers')
                 ->help('Only servers they created themselves. Deleting cannot be undone.')
@@ -29,5 +35,6 @@ class ServerCreatorProvider extends ExtensionProvider
         ]));
 
         $this->wrapAction(RestoresBackupStatuses::class, static fn (RestoresBackupStatuses $inner): RestoresBackupStatuses => new RestoreListener($inner));
+        $this->wrapAction(ChangesServerEgg::class, static fn (ChangesServerEgg $inner): ChangesServerEgg => new EggListener($inner));
     }
 }

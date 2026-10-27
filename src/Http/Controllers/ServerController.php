@@ -8,6 +8,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Pterodactyl\Models\Server;
 use ServerCreator\Exceptions\CreatorException;
+use ServerCreator\Http\Presenter;
+use ServerCreator\Models\Game;
 use ServerCreator\Models\OwnedServer;
 use ServerCreator\Services\Quotas;
 use ServerCreator\Services\ServerManager;
@@ -15,7 +17,7 @@ use ServerCreator\Settings;
 use ServerCreator\Support\Quota;
 
 /**
- * Resize and delete for the owner of a server they created themselves.
+ * Resize, switch the game and delete, for the owner of a server they created themselves.
  */
 final class ServerController
 {
@@ -37,8 +39,11 @@ final class ServerController
         return new JsonResponse([
             'owned' => true,
             'allow_resize' => $this->settings->allowResize(),
+            'allow_switch' => $this->settings->allowSwitch(),
             'allow_delete' => $this->settings->allowDelete(),
             'game' => $game?->name,
+            'game_id' => $game?->id,
+            'artwork' => $game?->artwork(),
             'current' => ['memory' => $server->memory, 'disk' => $server->disk, 'cpu' => $server->cpu],
             'limits' => collect(['memory', 'disk', 'cpu'])->mapWithKeys(static fn (string $resource): array => [$resource => [
                 'min' => $game?->{"{$resource}_min"} ?? Quota::SMALLEST[$resource],
@@ -48,6 +53,10 @@ final class ServerController
                 'limit' => $quota->limits[$resource] ?? 0,
                 'available' => $available[$resource],
             ]])->all(),
+            'remaining' => $available,
+            'games' => $this->settings->allowSwitch()
+                ? Game::query()->with('egg:id,name')->where('enabled', true)->whereKeyNot($game?->id ?? 0)->orderBy('sort')->orderBy('name')->get()->map(static fn (Game $item): array => Presenter::game($item))->all()
+                : [],
         ]);
     }
 
@@ -62,6 +71,32 @@ final class ServerController
         ]);
 
         $this->manager->resize($request->user(), $server, (int) $data['memory'], (int) $data['disk'], (int) $data['cpu']);
+
+        return $this->index($request, $server->refresh());
+    }
+
+    public function game(Request $request, Server $server): JsonResponse
+    {
+        throw_unless($this->settings->allowSwitch(), new CreatorException('Switching the game is turned off.', 403));
+
+        $data = $request->validate([
+            'game' => ['required', 'integer'],
+            'memory' => ['required', 'integer', 'min:0'],
+            'disk' => ['required', 'integer', 'min:0'],
+            'cpu' => ['required', 'integer', 'min:1'],
+            'keep_variables' => ['required', 'boolean'],
+            'reinstall' => ['required', 'boolean'],
+        ]);
+
+        $game = Game::query()->with('egg')->where('enabled', true)->find((int) $data['game']) ?? throw new CreatorException('This game cannot be picked.', 422);
+
+        $this->manager->switchGame($request->user(), $server, $game, [
+            'memory' => (int) $data['memory'],
+            'disk' => (int) $data['disk'],
+            'cpu' => (int) $data['cpu'],
+            'keep_variables' => (bool) $data['keep_variables'],
+            'reinstall' => (bool) $data['reinstall'],
+        ]);
 
         return $this->index($request, $server->refresh());
     }

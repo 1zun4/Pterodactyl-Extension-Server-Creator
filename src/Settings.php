@@ -19,4 +19,9 @@ final readonly class Settings
     {
         return (bool) ($this->registry->get('server-creator')?->get('allow_resize') ?? true);
     }
+
+    public function allowSwitch(): bool
+    {
+        return (bool) ($this->registry->get('server-creator')?->get('allow_switch') ?? true);
+    }
 }
